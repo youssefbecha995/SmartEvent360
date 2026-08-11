@@ -1,0 +1,23 @@
+// Shim pour es-toolkit/compat/get utilisé par recharts
+export { default as get } from 'lodash/get';
+export { default as isString } from 'lodash/isString';
+export { default as isNil } from 'lodash/isNil';
+export { default as isArray } from 'lodash/isArray';
+export { default as isObject } from 'lodash/isObject';
+export { default as isFunction } from 'lodash/isFunction';
+export { default as isNumber } from 'lodash/isNumber';
+export { default as isBoolean } from 'lodash/isBoolean';
+export { default as isEqual } from 'lodash/isEqual';
+export { default as omit } from 'lodash/omit';
+export { default as pick } from 'lodash/pick';
+export { default as clamp } from 'lodash/clamp';
+export { default as range } from 'lodash/range';
+export { default as sortBy } from 'lodash/sortBy';
+export { default as flatMap } from 'lodash/flatMap';
+export { default as groupBy } from 'lodash/groupBy';
+export { default as maxBy } from 'lodash/maxBy';
+export { default as minBy } from 'lodash/minBy';
+export { default as memoize } from 'lodash/memoize';
+export { default as throttle } from 'lodash/throttle';
+export { default as uniqBy } from 'lodash/uniqBy';
+export { default as mapValues } from 'lodash/mapValues';
