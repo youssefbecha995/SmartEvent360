@@ -1,0 +1,443 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  ORGANIZER
+  USER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  ERROR
+}
+
+enum PriceType {
+  FIXE
+  A_PARTIR_DE
+  PAR_HEURE
+  PAR_JOUR
+  PAR_PERSONNE
+  PAR_QUANTITE
+  SUR_DEVIS
+}
+
+enum ResourceAvailability {
+  DISPONIBLE
+  INDISPONIBLE
+  MAINTENANCE
+  RESERVEE
+}
+
+enum ServiceParamType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  BOOLEAN
+  SELECT
+  MULTI_SELECT
+  RESOURCE_SELECT
+  DATE
+  TIME
+  DURATION
+  PRICE
+  QUANTITY
+}
+
+enum PackServiceStatus {
+  INCLUS
+  OPTIONNEL
+  OBLIGATOIRE
+}
+
+enum PackStatus {
+  BROUILLON
+  EN_ATTENTE
+  PUBLIE
+  ARCHIVE
+}
+
+// ─────────────────────────────────────────────
+// User
+// ─────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  nom       String?
+  prenom    String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Coordonnées détaillées (clients) ──
+  address    String?
+  city       String?
+  postalCode String?
+  profession String?   // profession / activité
+  phone      String?   // 1er téléphone
+  phone2     String?   // 2ème téléphone
+  email2     String?   // 2ème email
+  company    String?   // société (client pro)
+  cin        String?   // n° carte d'identité / passeport
+  matfisc    String?   // matricule fiscal
+  notes      String?
+  clientType String?   // 'particulier' | 'entreprise'
+
+  // Relations
+  events        Event[] @relation("EventOrganizer")
+  clientEvents  Event[] @relation("EventClient")
+  bookings      Booking[]
+  notifications Notification[]
+  favoriteServices FavoriteService[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// Category
+// ─────────────────────────────────────────────
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  color     String?  // ex: "#FF5733" pour l'affichage UI
+  createdAt DateTime @default(now())
+
+  events Event[]
+
+  @@map("categories")
+}
+
+// ─────────────────────────────────────────────
+// Event
+// ─────────────────────────────────────────────
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  location    String
+  date        DateTime
+  imageUrl    String?
+  capacity    Int
+  price       Float    @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  organizerId String
+  organizer   User     @relation("EventOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+
+  clientId String?
+  client   User?    @relation("EventClient", fields: [clientId], references: [id], onDelete: SetNull)
+
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  bookings    Booking[]
+
+  @@index([organizerId])
+  @@index([clientId])
+  @@index([categoryId])
+  @@index([date])
+  @@map("events")
+}
+
+// ─────────────────────────────────────────────
+// Booking (Ticket)
+// ─────────────────────────────────────────────
+
+model Booking {
+  id        String        @id @default(cuid())
+  status    BookingStatus @default(PENDING)
+  qrCode    String?       @unique // code généré à la confirmation
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  // Relations
+  userId  String
+  user    User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId]) // un utilisateur ne peut réserver qu'une fois par événement
+  @@index([userId])
+  @@index([eventId])
+  @@map("bookings")
+}
+
+// ─────────────────────────────────────────────
+// Pack (Offre commerciale)
+// ─────────────────────────────────────────────
+
+model Pack {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  imageUrl    String?
+  images      Json?       // ["url1", "url2", ...] gallery
+  videoUrl    String?     // YouTube / Vimeo
+  price       Float
+  originalPrice Float?    // total individual prices (for showing savings)
+  currency    String      @default("TND")
+  pricePerPerson Float?   // unit price per guest
+  depositPercent Float?   // 0-100 required deposit %
+  cancellationFee Float?  // penalty fee
+  duration    Int         @default(4)
+  maxGuests   Int         @default(100)
+  minGuests   Int         @default(0)
+  badge       String?
+  category    String?     // ECONOMIQUE / STANDARD / PREMIUM / LUXE
+  isPopular   Boolean     @default(false)
+  isActive    Boolean     @default(true)
+  isCustomizable Boolean @default(false)
+  status      PackStatus  @default(PUBLIE)
+  eventType   String?     // mariage, anniversaire, fianceailles, etc.
+  promoCode   String?     // promo code
+  negotiable  Boolean     @default(false) // price negotiable on quote
+  isCombo     Boolean     @default(false) // combinable with other offers
+  isSeasonalPromo Boolean @default(false)
+  promoStartDate DateTime?
+  promoEndDate   DateTime?
+  translations Json?
+  visibleOnStore Boolean @default(true)
+  visibleForClients Boolean @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  packServices PackService[]
+  features     Json?    // kept for backward compat
+
+  @@map("packs")
+}
+
+// ─────────────────────────────────────────────
+// CrmRecord (stockage générique des données CRM)
+// kind = "equipment" | "personnel" | "maintenance" | ...
+// ─────────────────────────────────────────────
+
+model CrmRecord {
+  id        String   @id @default(cuid())
+  kind      String
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind])
+  @@map("crm_records")
+}
+
+// ─────────────────────────────────────────────
+// Notification
+// ─────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType @default(INFO)
+  title     String
+  message   String
+  lien      String?          // route frontend cible (ex: "/admin/rendez-vous")
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────
+// ServiceType (dynamic service categories)
+// ─────────────────────────────────────────────
+
+model ServiceType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  icon      String?
+  color     String?
+  active    Boolean  @default(true)
+  displayOrder Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  services Service[]
+
+  @@map("service_types")
+}
+
+// ─────────────────────────────────────────────
+// Service (catalogue entry)
+// ─────────────────────────────────────────────
+
+model Service {
+  id              String    @id @default(cuid())
+  name            String
+  code            String?   @unique
+  description     String?
+  shortDescription String?
+  icon            String?
+  image           String?
+  basePrice       Float     @default(0)
+  priceMin        Float?
+  priceMax        Float?
+  priceType       PriceType @default(A_PARTIR_DE)
+  active          Boolean   @default(true)
+  featured        Boolean   @default(false)
+  displayOrder    Int       @default(0)
+  visibleOnStore  Boolean   @default(true)
+  visibleForClients Boolean @default(true)
+  minAdvanceDays  Int       @default(0)
+  minDuration     Int?      // hours
+  availabilityMode String  @default("always") // always | calendar | on_request
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdBy       String?
+  updatedBy       String?
+
+  // Translations stored as JSON: { fr: "...", en: "...", ar: "..." }
+  translations Json?
+
+  // Relations
+  typeId      String?
+  type        ServiceType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
+
+  parameters  ServiceParameter[]
+  resources   ServiceResource[]
+  packServices PackService[]
+  favoriteServices FavoriteService[]
+
+  @@index([typeId])
+  @@index([active])
+  @@index([featured])
+  @@map("services")
+}
+
+// ─────────────────────────────────────────────
+// ServiceParameter (dynamic config fields)
+// ─────────────────────────────────────────────
+
+model ServiceParameter {
+  id          String          @id @default(cuid())
+  name        String
+  type        ServiceParamType @default(TEXT)
+  options     Json?           // for SELECT / MULTI_SELECT: ["opt1", "opt2"]
+  defaultValue Json?
+  required    Boolean         @default(false)
+  displayOrder Int            @default(0)
+  group       String?         // grouping label
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@map("service_parameters")
+}
+
+// ─────────────────────────────────────────────
+// ServiceResource (concrete provider for a service)
+// ─────────────────────────────────────────────
+
+model ServiceResource {
+  id          String                @id @default(cuid())
+  name        String
+  description String?
+  image       String?
+  basePrice   Float?
+  capacity    Int?
+  location    String?
+  city        String?
+  availability ResourceAvailability @default(DISPONIBLE)
+  active      Boolean               @default(true)
+  displayOrder Int                  @default(0)
+  metadata    Json?                 // dynamic extra fields
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  packServices PackService[]
+
+  @@index([serviceId])
+  @@index([availability])
+  @@map("service_resources")
+}
+
+// ─────────────────────────────────────────────
+// PackService (join table: Pack ↔ Service)
+// ─────────────────────────────────────────────
+
+model PackService {
+  id          String            @id @default(cuid())
+  quantity    Int               @default(1)
+  duration    Int?              // hours override within this pack
+  status      PackServiceStatus @default(INCLUS)
+  config      Json?             // per-pack service configuration (options chosen by admin)
+  displayOrder Int              @default(0)
+  priceOverride Float?          // optional per-pack price override for this service
+
+  packId    String
+  pack      Pack    @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  serviceId    String
+  service      Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  resourceId String?
+  resource   ServiceResource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([packId, serviceId])
+  @@index([packId])
+  @@index([serviceId])
+  @@map("pack_services")
+}
+
+// ─────────────────────────────────────────────
+// FavoriteService (client favourites)
+// ─────────────────────────────────────────────
+
+model FavoriteService {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serviceId])
+  @@index([userId])
+  @@index([serviceId])
+  @@map("favorite_services")
+}
