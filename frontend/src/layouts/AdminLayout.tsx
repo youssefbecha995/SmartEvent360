@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, FileText, CalendarDays, UserCheck,
   Package, Calendar, DollarSign, Phone, Clock, Settings,
   LogOut, Menu, Search, ChevronDown, Plus, Ticket, Archive,
-  Sun, Moon, Globe, Layers
+  Sun, Moon, Globe, Layers, UsersRound
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n, TranslationKey } from '@/lib/i18n';
@@ -18,6 +18,7 @@ const navItems = [
   { to: '/admin/reservations', icon: Ticket,          label: 'Réservations' },
   { to: '/admin/packs',        icon: Archive,         label: 'Packs & Offres' },
   { to: '/admin/services',     icon: Layers,          label: 'Services' },
+  { to: '/admin/prestataires', icon: UsersRound,      label: 'Prestataires' },
   { to: '/admin/personnel',    icon: UserCheck,       label: 'Personnel' },
   { to: '/admin/equipements',  icon: Package,         label: 'Équipements' },
   { to: '/admin/calendrier',   icon: Calendar,        label: 'Calendrier' },

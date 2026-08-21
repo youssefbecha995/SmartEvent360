@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, Edit2, Save, X, Package, Settings,
-  Clock, Users, Check, GripVertical, ChevronDown, ChevronUp,
+  Clock, Users, Check, GripVertical, ChevronDown, ChevronUp, User,
+  Calculator,
 } from 'lucide-react';
-import { packsApi, servicesApi, NeonPack, NeonPackService, ServiceItem, ServiceResource } from '@/lib/neonApi';
+import { packsApi, servicesApi, providersApi, NeonPack, NeonPackService, ServiceItem, ServiceResource, Provider } from '@/lib/neonApi';
 import { formatPrice } from '@/lib/format';
 import { useToast } from '@/components/ui/Toast';
 
@@ -50,11 +51,18 @@ export default function AdminPackDetail() {
   // Configure service modal
   const [configService, setConfigService] = useState<NeonPackService | null>(null);
   const [configForm, setConfigForm] = useState({
-    resourceId: '', quantity: '1', duration: '', priceOverride: '',
+    resourceId: '', providerId: '', quantity: '1', duration: '', priceOverride: '',
     status: 'INCLUS', displayOrder: '0', config: '',
   });
   const [serviceResources, setServiceResources] = useState<ServiceResource[]>([]);
   const [serviceParameters, setServiceParameters] = useState<any[]>([]);
+  const [serviceProviders, setServiceProviders] = useState<Provider[]>([]);
+
+  // Add service with provider flow
+  const [addProviderStep, setAddProviderStep] = useState(false);
+  const [selectedServiceForProvider, setSelectedServiceForProvider] = useState<ServiceItem | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<Provider[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -151,6 +159,8 @@ export default function AdminPackDetail() {
   // ── Add service to pack ──
   const openAddService = async () => {
     setShowAddService(true);
+    setAddProviderStep(false);
+    setSelectedServiceForProvider(null);
     setLoadingServices(true);
     try {
       const res = await servicesApi.list({ limit: 100 });
@@ -160,11 +170,24 @@ export default function AdminPackDetail() {
     finally { setLoadingServices(false); }
   };
 
-  const addServiceToPack = async (serviceId: string) => {
+  const handleSelectServiceForProvider = async (service: ServiceItem) => {
+    setSelectedServiceForProvider(service);
+    setAddProviderStep(true);
+    setLoadingProviders(true);
+    try {
+      const providers = await providersApi.list({ serviceId: service.id });
+      setAvailableProviders(providers);
+    } catch { setAvailableProviders([]); }
+    finally { setLoadingProviders(false); }
+  };
+
+  const addServiceToPack = async (serviceId: string, providerId?: string | null) => {
     if (!pack) return;
     try {
-      await packsApi.addService(pack.id, { serviceId });
+      await packsApi.addService(pack.id, { serviceId, providerId: providerId ?? null });
       setShowAddService(false);
+      setAddProviderStep(false);
+      setSelectedServiceForProvider(null);
       success('Service ajouté au pack');
       load();
     } catch (e: any) {
@@ -190,6 +213,7 @@ export default function AdminPackDetail() {
     setServiceParameters(ps.service.parameters || []);
     setConfigForm({
       resourceId: ps.resourceId || '',
+      providerId: ps.providerId || '',
       quantity: String(ps.quantity || 1),
       duration: ps.duration != null ? String(ps.duration) : '',
       priceOverride: ps.priceOverride != null ? String(ps.priceOverride) : '',
@@ -197,6 +221,12 @@ export default function AdminPackDetail() {
       displayOrder: String(ps.displayOrder || 0),
       config: ps.config ? JSON.stringify(ps.config, null, 2) : '',
     });
+    setLoadingProviders(true);
+    try {
+      const providers = await providersApi.list({ serviceId: ps.serviceId });
+      setServiceProviders(providers);
+    } catch { setServiceProviders([]); }
+    finally { setLoadingProviders(false); }
   };
 
   const saveConfig = async () => {
@@ -210,6 +240,7 @@ export default function AdminPackDetail() {
       await packsApi.addService(pack.id, {
         serviceId: configService.serviceId,
         resourceId: configForm.resourceId || null,
+        providerId: configForm.providerId || null,
         quantity: Number(configForm.quantity) || 1,
         duration: configForm.duration ? Number(configForm.duration) : null,
         priceOverride: configForm.priceOverride ? Number(configForm.priceOverride) : null,
@@ -225,6 +256,15 @@ export default function AdminPackDetail() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const calcPrice = async () => {
+    if (!pack) return;
+    try {
+      const res = await packsApi.calculatePrice(pack.id);
+      success(`Prix calculé : ${formatPrice(res.finalPrice)} (base ${formatPrice(res.totalServices)}, -${res.discountPercent}%)`);
+      load();
+    } catch (e: any) { toastError('Erreur', e.message); }
   };
 
   if (loading) return <div className="glass rounded-2xl h-64 animate-pulse" />;
@@ -264,6 +304,9 @@ export default function AdminPackDetail() {
         </div>
         <button onClick={startEdit} className="btn-outline-gold py-2 px-4 text-sm flex items-center gap-2">
           <Edit2 size={14} /> Modifier
+        </button>
+        <button onClick={calcPrice} className="btn-outline-gold py-2 px-4 text-sm flex items-center gap-2">
+          <Calculator size={14} /> Calculer prix
         </button>
       </div>
 
@@ -332,6 +375,11 @@ export default function AdminPackDetail() {
                       </div>
                       {ps.resource && (
                         <p className="text-dark-500 text-xs mt-0.5">Ressource : {ps.resource.name}</p>
+                      )}
+                      {ps.provider && (
+                        <p className="text-blue-400 text-xs mt-0.5 flex items-center gap-1">
+                          <User size={10} /> {ps.provider.name}{ps.provider.city ? ` · ${ps.provider.city}` : ''}
+                        </p>
                       )}
                       {configEntries.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
@@ -545,36 +593,74 @@ export default function AdminPackDetail() {
       {/* ── Add Service Modal ── */}
       {showAddService && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowAddService(false)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setShowAddService(false); setAddProviderStep(false); setSelectedServiceForProvider(null); }} />
           <div className="relative bg-dark-800 border border-white/10 rounded-2xl max-w-md w-full z-10 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-5 border-b border-white/10">
-              <h2 className="text-lg font-semibold text-white">Ajouter un service</h2>
-              <button onClick={() => setShowAddService(false)} className="text-dark-400 hover:text-white"><X size={18} /></button>
+              <h2 className="text-lg font-semibold text-white">{addProviderStep ? 'Choisir un prestataire' : 'Ajouter un service'}</h2>
+              <button onClick={() => { setShowAddService(false); setAddProviderStep(false); setSelectedServiceForProvider(null); }} className="text-dark-400 hover:text-white"><X size={18} /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-5">
-              {loadingServices ? (
-                <div className="space-y-3">
-                  {Array(4).fill(0).map((_, i) => <div key={i} className="h-12 bg-dark-700 rounded-xl animate-pulse" />)}
-                </div>
-              ) : availableServices.length === 0 ? (
-                <p className="text-dark-400 text-sm text-center py-8">Tous les services sont déjà dans ce pack.</p>
-              ) : (
-                <div className="space-y-2">
-                  {availableServices.map(s => (
-                    <button key={s.id} onClick={() => addServiceToPack(s.id)}
-                      className="w-full flex items-center gap-3 p-3 glass rounded-xl hover:bg-gold-500/10 hover:border-gold-500/30 border border-transparent transition-all text-left">
-                      <div className="w-8 h-8 rounded-lg bg-gold-500/20 flex items-center justify-center flex-shrink-0">
-                        {s.icon ? <span className="text-sm">{s.icon}</span> : <Package size={14} className="text-gold-500" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-white text-sm font-medium block truncate">{s.name}</span>
-                        {s.type && <span className="text-dark-500 text-xs">{s.type.name}</span>}
-                      </div>
-                      <span className="text-gold-400 text-xs">{formatPrice(s.basePrice)}</span>
-                      <Plus size={14} className="text-dark-400 flex-shrink-0" />
+              {addProviderStep ? (
+                /* Provider selection step */
+                loadingProviders ? (
+                  <div className="space-y-3">
+                    {Array(3).fill(0).map((_, i) => <div key={i} className="h-16 bg-dark-700 rounded-xl animate-pulse" />)}
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-dark-400 text-xs mb-3">
+                      Prestataires pour <span className="text-white font-medium">{selectedServiceForProvider?.name}</span>
+                    </p>
+                    <div className="space-y-2 mb-3">
+                      {availableProviders.map(p => (
+                        <button key={p.id} onClick={() => addServiceToPack(selectedServiceForProvider!.id, p.id)}
+                          className="w-full flex items-center gap-3 p-3 glass rounded-xl hover:bg-gold-500/10 hover:border-gold-500/30 border border-transparent transition-all text-left">
+                          <div className="w-8 h-8 rounded-lg bg-gold-500/20 flex items-center justify-center flex-shrink-0">
+                            <User size={14} className="text-gold-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-white text-sm font-medium truncate">{p.name}</span>
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.isAvailable ? 'bg-green-400' : 'bg-yellow-400'}`} />
+                            </div>
+                            {p.city && <span className="text-dark-500 text-xs">{p.city}</span>}
+                          </div>
+                          <span className="text-gold-400 text-xs font-medium">{formatPrice(p.price)}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => addServiceToPack(selectedServiceForProvider!.id)}
+                      className="w-full text-center text-dark-400 hover:text-white text-xs py-2 transition-colors border border-dashed border-dark-600 rounded-xl">
+                      Sans prestataire
                     </button>
-                  ))}
-                </div>
+                  </div>
+                )
+              ) : (
+                /* Service selection step */
+                loadingServices ? (
+                  <div className="space-y-3">
+                    {Array(4).fill(0).map((_, i) => <div key={i} className="h-12 bg-dark-700 rounded-xl animate-pulse" />)}
+                  </div>
+                ) : availableServices.length === 0 ? (
+                  <p className="text-dark-400 text-sm text-center py-8">Tous les services sont déjà dans ce pack.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {availableServices.map(s => (
+                      <button key={s.id} onClick={() => handleSelectServiceForProvider(s)}
+                        className="w-full flex items-center gap-3 p-3 glass rounded-xl hover:bg-gold-500/10 hover:border-gold-500/30 border border-transparent transition-all text-left">
+                        <div className="w-8 h-8 rounded-lg bg-gold-500/20 flex items-center justify-center flex-shrink-0">
+                          {s.icon ? <span className="text-sm">{s.icon}</span> : <Package size={14} className="text-gold-500" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-white text-sm font-medium block truncate">{s.name}</span>
+                          {s.type && <span className="text-dark-500 text-xs">{s.type.name}</span>}
+                        </div>
+                        <span className="text-gold-400 text-xs">{formatPrice(s.basePrice)}</span>
+                        <Plus size={14} className="text-dark-400 flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -602,6 +688,19 @@ export default function AdminPackDetail() {
                     <option value="">— Aucune —</option>
                     {serviceResources.map(r => (
                       <option key={r.id} value={r.id}>{r.name}{r.basePrice ? ` (${formatPrice(r.basePrice)})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Provider selection */}
+              {serviceProviders.length > 0 && (
+                <div>
+                  <label className="text-dark-300 text-xs mb-1.5 block">Prestataire</label>
+                  <select value={configForm.providerId} onChange={e => setConfigForm(p => ({ ...p, providerId: e.target.value }))} className="input-field w-full py-2.5 text-sm">
+                    <option value="">— Aucun —</option>
+                    {serviceProviders.filter(p => p.isAvailable).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''} — {formatPrice(p.price)}</option>
                     ))}
                   </select>
                 </div>

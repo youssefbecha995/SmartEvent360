@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Star, Filter, X, Check, ChevronDown } from 'lucide-react';
-import { servicesApi, ServiceType, ServiceItem } from '@/lib/neonApi';
+import { Search, Star, Filter, X, Check, ChevronDown, Users } from 'lucide-react';
+import { servicesApi, providersApi, ServiceType, ServiceItem, Provider } from '@/lib/neonApi';
 
 const categoryImages: Record<string, string> = {
   default: 'https://images.pexels.com/photos/1763075/pexels-photo-1763075.jpeg?auto=compress&cs=tinysrgb&w=600',
@@ -245,6 +245,16 @@ function ServiceCard({ service, onClick }: { service: ServiceItem; onClick: () =
 }
 
 function ServiceDetailModal({ service, onClose }: { service: ServiceItem; onClose: () => void }) {
+  const [serviceProviders, setServiceProviders] = useState<Provider[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(true);
+
+  useEffect(() => {
+    setLoadingProviders(true);
+    providersApi.list({ serviceId: service.id, active: 'true' })
+      .then(provs => setServiceProviders(provs || []))
+      .catch(() => setServiceProviders([]))
+      .finally(() => setLoadingProviders(false));
+  }, [service.id]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
@@ -287,6 +297,39 @@ function ServiceDetailModal({ service, onClose }: { service: ServiceItem; onClos
                   <span key={r.id} className="glass rounded-lg px-3 py-1.5 text-xs text-dark-300">
                     {r.name} {r.location ? `— ${r.location}` : ''}
                   </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Prestataires disponibles */}
+          {!loadingProviders && serviceProviders.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-white font-medium mb-2 flex items-center gap-2">
+                <Users size={16} className="text-gold-500" /> Prestataires disponibles ({serviceProviders.length})
+              </h4>
+              <div className="space-y-2">
+                {serviceProviders.map(p => (
+                  <div key={p.id} className="glass rounded-xl px-4 py-3 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-gold-500/20 flex items-center justify-center flex-shrink-0">
+                      <span className="text-gold-500 text-sm font-bold">{p.name.charAt(0)}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium">{p.name}</p>
+                      <div className="flex items-center gap-2 text-xs">
+                        {p.city && <span className="text-dark-400">{p.city}</span>}
+                        {p.rating > 0 && (
+                          <span className="flex items-center gap-1 text-gold-400">
+                            <Star size={10} className="fill-gold-400" /> {p.rating.toFixed(1)}
+                          </span>
+                        )}
+                        {p.reviewCount > 0 && (
+                          <span className="text-dark-500">({p.reviewCount} avis)</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-gold-400 text-sm font-bold">{p.price} DT</span>
+                  </div>
                 ))}
               </div>
             </div>

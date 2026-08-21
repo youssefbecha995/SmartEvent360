@@ -8,6 +8,8 @@ import PublicLayout from '@/layouts/PublicLayout';
 import HomePage from '@/pages/public/HomePage';
 import ServicesPage from '@/pages/public/ServicesPage';
 import PacksPage from '@/pages/public/PacksPage';
+import ProvidersPage from '@/pages/public/ProvidersPage';
+import ProviderDetailPage from '@/pages/public/ProviderDetailPage';
 import AboutPage from '@/pages/public/AboutPage';
 import ContactPage from '@/pages/public/ContactPage';
 import QuotePage from '@/pages/public/QuotePage';
@@ -29,6 +31,7 @@ import ClientContrats from '@/pages/client/ClientContrats';
 import ClientProfil from '@/pages/client/ClientProfil';
 import ClientSupport from '@/pages/client/ClientSupport';
 import ClientServices from '@/pages/client/ClientServices';
+import ClientPrestataires from '@/pages/client/ClientPrestataires';
 
 // Admin pages
 import AdminLayout from '@/layouts/AdminLayout';
@@ -52,6 +55,8 @@ import AdminPackDetail from '@/pages/admin/AdminPackDetail';
 import AdminReservations from '@/pages/admin/AdminReservations';
 import AdminServices from '@/pages/admin/AdminServices';
 import AdminServiceDetail from '@/pages/admin/AdminServiceDetail';
+import AdminProviders from '@/pages/admin/AdminProviders';
+import AdminProviderDetail from '@/pages/admin/AdminProviderDetail';
 
 const SPINNER = (
   <div className="min-h-screen bg-dark-900 flex items-center justify-center">
@@ -101,6 +106,8 @@ function AppRoutes() {
         <Route path="/" element={<HomePage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/packs" element={<PacksPage />} />
+        <Route path="/prestataires" element={<ProvidersPage />} />
+        <Route path="/prestataires/:id" element={<ProviderDetailPage />} />
         <Route path="/a-propos" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/devis" element={<QuotePage />} />
@@ -123,6 +130,7 @@ function AppRoutes() {
         <Route path="profil" element={<ClientProfil />} />
         <Route path="support" element={<ClientSupport />} />
         <Route path="services" element={<ClientServices />} />
+        <Route path="prestataires" element={<ClientPrestataires />} />
       </Route>
 
       {/* Admin */}
@@ -147,6 +155,8 @@ function AppRoutes() {
         <Route path="reservations" element={<AdminReservations />} />
         <Route path="services" element={<AdminServices />} />
         <Route path="services/:id" element={<AdminServiceDetail />} />
+        <Route path="prestataires" element={<AdminProviders />} />
+        <Route path="prestataires/:id" element={<AdminProviderDetail />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

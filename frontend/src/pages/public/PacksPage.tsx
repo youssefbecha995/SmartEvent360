@@ -201,6 +201,7 @@ export default function PacksPage() {
                               {ps.service.icon && <span className="text-xs">{ps.service.icon}</span>}
                               <span>{ps.service.name}</span>
                               {ps.resource && <span className="text-dark-500">— {ps.resource.name}</span>}
+                              {ps.provider && <span className="text-blue-400 text-[10px]">({ps.provider.name})</span>}
                             </li>
                           ))}
                           {pack.packServices.length > MAX_FEATURES_IN_CARD && (

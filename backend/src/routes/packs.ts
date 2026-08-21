@@ -19,6 +19,7 @@ router.get("/", async (_req: Request, res: Response) => {
         include: {
           service: { select: { id: true, name: true, icon: true, image: true } },
           resource: { select: { id: true, name: true } },
+          provider: { select: { id: true, name: true, price: true, isAvailable: true, city: true } },
         },
         orderBy: { displayOrder: "asc" },
       },
@@ -37,6 +38,7 @@ router.get("/admin", authenticate, async (req: Request, res: Response) => {
         include: {
           service: { select: { id: true, name: true, icon: true } },
           resource: { select: { id: true, name: true } },
+          provider: { select: { id: true, name: true, price: true } },
         },
       },
       _count: { select: { packServices: true } },
@@ -60,6 +62,11 @@ router.get("/:id", async (req: Request, res: Response) => {
             },
           },
           resource: true,
+          provider: {
+            include: {
+              composition: true,
+            },
+          },
         },
         orderBy: { displayOrder: "asc" },
       },
@@ -130,6 +137,7 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
           packId: pack.id,
           serviceId: svc.serviceId,
           resourceId: svc.resourceId ?? null,
+          providerId: svc.providerId ?? null,
           quantity: svc.quantity ? Number(svc.quantity) : 1,
           duration: svc.duration != null ? Number(svc.duration) : null,
           status: svc.status || "INCLUS",
@@ -149,6 +157,7 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
         include: {
           service: { select: { id: true, name: true, icon: true } },
           resource: { select: { id: true, name: true } },
+          provider: { select: { id: true, name: true, price: true } },
         },
       },
     },
@@ -220,6 +229,7 @@ router.put("/:id", authenticate, async (req: Request, res: Response) => {
           packId: pack.id,
           serviceId: svc.serviceId,
           resourceId: svc.resourceId ?? null,
+          providerId: svc.providerId ?? null,
           quantity: svc.quantity ? Number(svc.quantity) : 1,
           duration: svc.duration != null ? Number(svc.duration) : null,
           status: svc.status || "INCLUS",
@@ -238,6 +248,7 @@ router.put("/:id", authenticate, async (req: Request, res: Response) => {
         include: {
           service: { select: { id: true, name: true, icon: true } },
           resource: { select: { id: true, name: true } },
+          provider: { select: { id: true, name: true, price: true } },
         },
       },
     },
@@ -251,7 +262,7 @@ router.patch("/:id/services", authenticate, async (req: Request, res: Response) 
   const existing = await prisma.pack.findUnique({ where: { id: req.params.id } });
   if (!existing) { res.status(404).json({ error: "Pack not found" }); return; }
 
-  const { action, serviceId, resourceId, quantity, duration, status, config, displayOrder, priceOverride } = req.body;
+  const { action, serviceId, resourceId, providerId, quantity, duration, status, config, displayOrder, priceOverride } = req.body;
 
   if (action === "add" && serviceId) {
     const already = await prisma.packService.findUnique({
@@ -263,6 +274,7 @@ router.patch("/:id/services", authenticate, async (req: Request, res: Response) 
         where: { id: already.id },
         data: {
           ...(resourceId !== undefined && { resourceId: resourceId ?? null }),
+          ...(providerId !== undefined && { providerId: providerId ?? null }),
           ...(quantity !== undefined && { quantity: Number(quantity) }),
           ...(duration !== undefined && { duration: duration != null ? Number(duration) : null }),
           ...(status !== undefined && { status }),
@@ -278,6 +290,7 @@ router.patch("/:id/services", authenticate, async (req: Request, res: Response) 
           packId: req.params.id,
           serviceId,
           resourceId: resourceId ?? null,
+          providerId: providerId ?? null,
           quantity: quantity ? Number(quantity) : 1,
           duration: duration != null ? Number(duration) : null,
           status: status || "INCLUS",
@@ -307,6 +320,63 @@ router.delete("/:id", authenticate, async (req: Request, res: Response) => {
   await prisma.packService.deleteMany({ where: { packId: req.params.id } });
   await prisma.pack.delete({ where: { id: req.params.id } });
   res.status(204).send();
+});
+
+// ── POST /api/packs/:id/calculate-price  (ADMIN) — auto-calculate price from providers ──
+router.post("/:id/calculate-price", authenticate, async (req: Request, res: Response) => {
+  if (req.user!.role !== "ADMIN") { res.status(403).json({ error: "Forbidden" }); return; }
+  const pack = await prisma.pack.findUnique({
+    where: { id: req.params.id },
+    include: {
+      packServices: {
+        include: {
+          provider: { select: { price: true } },
+          service: { select: { basePrice: true } },
+          resource: { select: { basePrice: true } },
+        },
+      },
+    },
+  });
+  if (!pack) { res.status(404).json({ error: "Pack not found" }); return; }
+
+  // Calculate total from provider prices (or fallback to resource/service basePrice)
+  let totalServices = 0;
+  for (const ps of pack.packServices) {
+    const unitPrice = ps.priceOverride
+      ?? ps.provider?.price
+      ?? ps.resource?.basePrice
+      ?? ps.service?.basePrice
+      ?? 0;
+    totalServices += unitPrice * (ps.quantity || 1);
+  }
+
+  // Apply optional discount (from request body or default 10%)
+  const discountPercent = req.body.discountPercent != null ? Number(req.body.discountPercent) : 10;
+  const discountAmount = Math.round(totalServices * discountPercent / 100);
+  const finalPrice = totalServices - discountAmount;
+
+  // Update pack
+  await prisma.pack.update({
+    where: { id: pack.id },
+    data: {
+      price: finalPrice,
+      originalPrice: totalServices,
+    },
+  });
+
+  res.json({
+    totalServices,
+    discountPercent,
+    discountAmount,
+    finalPrice,
+    breakdown: pack.packServices.map(ps => ({
+      service: ps.serviceId,
+      provider: ps.provider?.price ?? null,
+      priceOverride: ps.priceOverride,
+      quantity: ps.quantity,
+      lineTotal: (ps.priceOverride ?? ps.provider?.price ?? ps.resource?.basePrice ?? ps.service?.basePrice ?? 0) * (ps.quantity || 1),
+    })),
+  });
 });
 
 export default router;

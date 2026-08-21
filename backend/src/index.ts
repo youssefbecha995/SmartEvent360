@@ -17,6 +17,7 @@ import publicRouter from "./routes/public";
 import uploadsRouter from "./routes/uploads";
 import notificationsRouter from "./routes/notifications";
 import servicesRouter from "./routes/services";
+import providersRouter from "./routes/providers";
 
 // Empêche le process de mourir sur une erreur asynchrone non gérée
 process.on("unhandledRejection", (reason) => {
@@ -51,6 +52,7 @@ app.use("/api/public", publicRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/services", servicesRouter);
+app.use("/api/providers", providersRouter);
 
 // Documentation interactive Swagger (OpenAPI)
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, { customSiteTitle: "SmartEvent360 API Docs" }));

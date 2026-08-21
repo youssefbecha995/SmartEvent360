@@ -53,6 +53,7 @@ export interface NeonUser {
   phone: string | null; phone2: string | null; email2: string | null;
   company: string | null; cin: string | null; matfisc: string | null;
   notes: string | null; clientType: string | null;
+  active?: boolean;
 }
 
 export interface NeonEvent {
@@ -74,30 +75,188 @@ export interface NeonBooking {
   event?: { id: string; title: string; date: string; location: string; price: number };
 }
 
+// ─── PRESTATAIRES (Providers) ──────────────────────────────────────────────
+
+export interface ProviderComposition {
+  id: string;
+  role: string;
+  quantity: number;
+  description: string | null;
+  providerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProviderAvailability {
+  id: string;
+  date: string;
+  status: 'DISPONIBLE' | 'RESERVEE' | 'INDISPONIBLE' | 'MAINTENANCE';
+  notes: string | null;
+  providerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProviderReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  userId: string;
+  providerId: string;
+  createdAt: string;
+  updatedAt: string;
+  user?: { id: string; name: string; email?: string };
+}
+
+export interface ProviderGallery {
+  id: string;
+  imageUrl: string;
+  caption: string | null;
+  displayOrder: number;
+  providerId: string;
+  createdAt: string;
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  description: string | null;
+  image: string | null;
+  price: number;
+  originalPrice: number | null;
+  isAvailable: boolean;
+  active: boolean;
+  rating: number | null;
+  reviewCount: number;
+  city: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  displayOrder: number;
+  metadata: any;
+  serviceId: string;
+  createdAt: string;
+  updatedAt: string;
+  service?: { id: string; name: string; icon: string | null };
+  composition?: ProviderComposition[];
+  availability?: ProviderAvailability[];
+  reviews?: ProviderReview[];
+  gallery?: ProviderGallery[];
+  _count?: { composition: number; packServices: number; reviews?: number };
+}
+
+// ─── SERVICES ────────────────────────────────────────────────────────────────
+
+export interface ServiceType {
+  id: string; name: string; slug: string; icon: string | null; color: string | null;
+  active: boolean; displayOrder: number;
+  _count?: { services: number };
+}
+
+export interface ServiceItem {
+  id: string; name: string; code: string | null; description: string | null;
+  shortDescription: string | null; icon: string | null; image: string | null;
+  basePrice: number; priceMin: number | null; priceMax: number | null;
+  priceType: string; active: boolean; featured: boolean; displayOrder: number;
+  visibleOnStore: boolean; visibleForClients: boolean;
+  minAdvanceDays: number; minDuration: number | null; availabilityMode: string;
+  translations: any; createdAt: string; updatedAt: string;
+  typeId: string | null;
+  type?: ServiceType;
+  resources?: any[];
+  parameters?: any[];
+  packServices?: any[];
+  providers?: Provider[]; // NOUVEAU : Liste des prestataires associés
+  _count?: { resources: number; parameters: number; packServices: number; providers: number };
+}
+
+export interface ServiceParameter {
+  id: string; name: string; type: string; options: any; defaultValue: any;
+  required: boolean; displayOrder: number; group: string | null;
+  description: string | null; serviceId: string;
+}
+
+export interface ServiceResource {
+  country: string;
+  id: string; name: string; description: string | null; image: string | null;
+  basePrice: number | null; capacity: number | null;
+  location: string | null; city: string | null;
+  availability: string; active: boolean; displayOrder: number; metadata: any;
+  serviceId: string;
+}
+
+export interface FavoriteService {
+  id: string; createdAt: string; serviceId: string;
+  service: ServiceItem;
+}
+
+export interface ServiceStats {
+  total: number; active: number; featured: number;
+  withResources: number; withPacks: number; withProviders: number;
+  popularServices: { id: string; name: string; icon: string | null; packCount: number; resourceCount: number; favoriteCount: number }[];
+}
+
+// ─── PACKS ────────────────────────────────────────────────────────────────────
+
 export interface NeonPackService {
-  id: string; quantity: number; duration: number | null;
-  status: string; config: any; displayOrder: number; priceOverride: number | null;
-  packId: string; serviceId: string; resourceId: string | null;
-  service: { id: string; name: string; icon: string | null; image?: string | null; parameters?: any[]; resources?: any[] };
+  id: string;
+  quantity: number;
+  duration: number | null;
+  status: string;
+  config: any;
+  displayOrder: number;
+  priceOverride: number | null;
+  packId: string;
+  serviceId: string;
+  resourceId: string | null;
+  providerId: string | null; // NOUVEAU : Prestataire choisi pour ce service
+  service: {
+    id: string;
+    name: string;
+    icon: string | null;
+    image?: string | null;
+    parameters?: any[];
+    resources?: any[];
+  };
   resource: { id: string; name: string } | null;
+  provider: Provider | null; // NOUVEAU : Prestataire avec tous ses détails
 }
 
 export interface NeonPack {
-  id: string; name: string; description: string | null; price: number;
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
   originalPrice: number | null;
-  currency: string; pricePerPerson: number | null;
-  depositPercent: number | null; cancellationFee: number | null;
-  duration: number; maxGuests: number; minGuests: number;
-  badge: string | null; imageUrl: string | null;
-  images: string[] | null; videoUrl: string | null;
+  currency: string;
+  pricePerPerson: number | null;
+  depositPercent: number | null;
+  cancellationFee: number | null;
+  duration: number;
+  maxGuests: number;
+  minGuests: number;
+  badge: string | null;
+  imageUrl: string | null;
+  images: string[] | null;
+  videoUrl: string | null;
   features: string[] | null;
   category: string | null;
-  isPopular: boolean; isActive: boolean; isCustomizable: boolean;
-  status: string; eventType: string | null;
-  promoCode: string | null; negotiable: boolean; isCombo: boolean;
-  isSeasonalPromo: boolean; promoStartDate: string | null; promoEndDate: string | null;
-  visibleOnStore: boolean; visibleForClients: boolean;
-  createdAt: string; updatedAt: string;
+  isPopular: boolean;
+  isActive: boolean;
+  isCustomizable: boolean;
+  status: string;
+  eventType: string | null;
+  promoCode: string | null;
+  negotiable: boolean;
+  isCombo: boolean;
+  isSeasonalPromo: boolean;
+  promoStartDate: string | null;
+  promoEndDate: string | null;
+  visibleOnStore: boolean;
+  visibleForClients: boolean;
+  createdAt: string;
+  updatedAt: string;
   packServices?: NeonPackService[];
   _count?: { packServices: number };
 }
@@ -174,10 +333,182 @@ export const packsApi = {
   create: (body: Record<string, unknown>) => request<NeonPack>('/packs', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: Record<string, unknown>) => request<NeonPack>(`/packs/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   delete: (id: string) => request<void>(`/packs/${id}`, { method: 'DELETE' }),
-  addService: (packId: string, body: Record<string, unknown>) =>
-    request<NeonPackService>(`/packs/${packId}/services`, { method: 'PATCH', body: JSON.stringify({ action: 'add', ...body }) }),
+  addService: (packId: string, body: Record<string, unknown>) => {
+    // body peut contenir : serviceId, providerId, quantity, duration, status, priceOverride, config
+    return request<NeonPackService>(`/packs/${packId}/services`, { 
+      method: 'PATCH', 
+      body: JSON.stringify({ action: 'add', ...body }) 
+    });
+  },
   removeService: (packId: string, serviceId: string) =>
     request<void>(`/packs/${packId}/services`, { method: 'PATCH', body: JSON.stringify({ action: 'remove', serviceId }) }),
+  calculatePrice: (packId: string, discountPercent?: number) =>
+    request<{ totalServices: number; discountPercent: number; discountAmount: number; finalPrice: number; breakdown: any[] }>(
+      `/packs/${packId}/calculate-price`,
+      { method: 'POST', body: JSON.stringify({ discountPercent }) },
+    ),
+};
+
+// ─── PRESTATAIRES (Providers) API ────────────────────────────────────────────
+
+export const providersApi = {
+  // Liste des prestataires
+  list: (p?: { serviceId?: string; city?: string; active?: string; search?: string; available?: string }) => {
+    const qs = new URLSearchParams();
+    if (p?.serviceId) qs.set('serviceId', p.serviceId);
+    if (p?.city) qs.set('city', p.city);
+    if (p?.active) qs.set('active', p.active);
+    if (p?.available) qs.set('available', p.available);
+    if (p?.search) qs.set('search', p.search);
+    return request<Provider[]>(`/providers?${qs}`);
+  },
+  
+  // Liste publique (uniquement disponibles)
+  publicList: (p?: { serviceId?: string; city?: string }) => {
+    const qs = new URLSearchParams();
+    if (p?.serviceId) qs.set('serviceId', p.serviceId);
+    if (p?.city) qs.set('city', p.city);
+    return request<Provider[]>(`/providers/public?${qs}`);
+  },
+  
+  // Récupérer un prestataire
+  get: (id: string) => request<Provider>(`/providers/${id}`),
+  
+  // CRUD
+  create: (body: Partial<Provider> & { composition?: Partial<ProviderComposition>[] }) =>
+    request<Provider>('/providers', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: Partial<Provider>) =>
+    request<Provider>(`/providers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  delete: (id: string) => request<void>(`/providers/${id}`, { method: 'DELETE' }),
+  
+  // Toggle disponibilité
+  toggleStatus: (id: string) => request<Provider>(`/providers/${id}/status`, { method: 'PATCH' }),
+  
+  // ── Composition ──
+  getCompositions: (providerId: string) => request<ProviderComposition[]>(`/providers/${providerId}/composition`),
+  addComposition: (providerId: string, body: { role: string; quantity?: number; description?: string }) =>
+    request<ProviderComposition>(`/providers/${providerId}/composition`, { method: 'POST', body: JSON.stringify(body) }),
+  updateComposition: (memberId: string, body: { role?: string; quantity?: number; description?: string }) =>
+    request<ProviderComposition>(`/providers/composition/${memberId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteComposition: (memberId: string) => request<void>(`/providers/composition/${memberId}`, { method: 'DELETE' }),
+  
+  // ── Disponibilité ──
+  getAvailability: (providerId: string, start?: string, end?: string) => {
+    const qs = new URLSearchParams();
+    if (start) qs.set('start', start);
+    if (end) qs.set('end', end);
+    return request<ProviderAvailability[]>(`/providers/${providerId}/availability?${qs}`);
+  },
+  setAvailability: (providerId: string, body: { date: string; status: string; notes?: string }) =>
+    request<ProviderAvailability>(`/providers/${providerId}/availability`, { method: 'POST', body: JSON.stringify(body) }),
+  bulkAvailability: (providerId: string, body: { dates: string[]; status: string }) =>
+    request<ProviderAvailability[]>(`/providers/${providerId}/availability/bulk`, { method: 'POST', body: JSON.stringify(body) }),
+  checkAvailability: (providerId: string, date: string) =>
+    request<{ available: boolean; status: string; message?: string }>(`/providers/${providerId}/check-availability?date=${date}`),
+  
+  // ── Reviews ──
+  getReviews: (providerId: string) => request<ProviderReview[]>(`/providers/${providerId}/reviews`),
+  addReview: (providerId: string, body: { rating: number; comment?: string }) =>
+    request<ProviderReview>(`/providers/${providerId}/reviews`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteReview: (reviewId: string) => request<void>(`/providers/reviews/${reviewId}`, { method: 'DELETE' }),
+  
+  // ── Gallery ──
+  getGallery: (providerId: string) => request<ProviderGallery[]>(`/providers/${providerId}/gallery`),
+  addGalleryPhoto: (providerId: string, body: { imageUrl: string; caption?: string; displayOrder?: number }) =>
+    request<ProviderGallery>(`/providers/${providerId}/gallery`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteGalleryPhoto: (photoId: string) => request<void>(`/providers/gallery/${photoId}`, { method: 'DELETE' }),
+  
+  // ── Stats ──
+  stats: () => request<{ total: number; active: number; withComposition: number; inPacks: number }>('/providers/admin/stats'),
+};
+
+// ─── Services API ────────────────────────────────────────────────────────────
+
+export const servicesApi = {
+  // ── Types ──
+  types: () => request<ServiceType[]>('/services/types'),
+  createType: (body: { name: string; icon?: string; color?: string; displayOrder?: number }) =>
+    request<ServiceType>('/services/types', { method: 'POST', body: JSON.stringify(body) }),
+  updateType: (id: string, body: Partial<ServiceType>) =>
+    request<ServiceType>(`/services/types/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteType: (id: string) => request<void>(`/services/types/${id}`, { method: 'DELETE' }),
+
+  // ── Admin CRUD ──
+  list: (p?: { page?: number; limit?: number; search?: string; typeId?: string; active?: string; featured?: string }) => {
+    const qs = new URLSearchParams();
+    if (p?.page) qs.set('page', String(p.page));
+    if (p?.limit) qs.set('limit', String(p.limit));
+    if (p?.search) qs.set('search', p.search);
+    if (p?.typeId) qs.set('typeId', p.typeId);
+    if (p?.active) qs.set('active', p.active);
+    if (p?.featured) qs.set('featured', p.featured);
+    return request<{ data: ServiceItem[]; total: number; page: number; limit: number }>(`/services?${qs}`);
+  },
+  get: (id: string) => request<ServiceItem>(`/services/${id}`),
+  create: (body: Partial<ServiceItem>) => request<ServiceItem>('/services', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: Partial<ServiceItem>) => request<ServiceItem>(`/services/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  delete: (id: string) => request<void>(`/services/${id}`, { method: 'DELETE' }),
+  toggleStatus: (id: string) => request<ServiceItem>(`/services/${id}/status`, { method: 'PATCH' }),
+  toggleFeatured: (id: string) => request<ServiceItem>(`/services/${id}/featured`, { method: 'PATCH' }),
+
+  // ── Parameters ──
+  getParameters: (serviceId: string) => request<ServiceParameter[]>(`/services/${serviceId}/parameters`),
+  createParameter: (serviceId: string, body: Partial<ServiceParameter>) =>
+    request<ServiceParameter>(`/services/${serviceId}/parameters`, { method: 'POST', body: JSON.stringify(body) }),
+  updateParameter: (id: string, body: Partial<ServiceParameter>) =>
+    request<ServiceParameter>(`/services/service-parameters/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteParameter: (id: string) => request<void>(`/services/service-parameters/${id}`, { method: 'DELETE' }),
+
+  // ── Resources ──
+  getResources: (serviceId: string) => request<ServiceResource[]>(`/services/${serviceId}/resources`),
+  createResource: (serviceId: string, body: Partial<ServiceResource>) =>
+    request<ServiceResource>(`/services/${serviceId}/resources`, { method: 'POST', body: JSON.stringify(body) }),
+  updateResource: (id: string, body: Partial<ServiceResource>) =>
+    request<ServiceResource>(`/services/service-resources/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteResource: (id: string) => request<void>(`/services/service-resources/${id}`, { method: 'DELETE' }),
+
+  // ── Prestataires associés au service ──
+  getProviders: (serviceId: string) => request<Provider[]>(`/services/${serviceId}/providers`),
+  addProvider: (serviceId: string, providerId: string) =>
+    request<{ success: boolean }>(`/services/${serviceId}/providers/${providerId}`, { method: 'POST' }),
+  removeProvider: (serviceId: string, providerId: string) =>
+    request<void>(`/services/${serviceId}/providers/${providerId}`, { method: 'DELETE' }),
+
+  // ── Public ──
+  publicCategories: () => request<ServiceType[]>('/services/public/categories'),
+  publicList: (p?: { typeId?: string; featured?: string; search?: string }) => {
+    const qs = new URLSearchParams();
+    if (p?.typeId) qs.set('typeId', p.typeId);
+    if (p?.featured) qs.set('featured', p.featured);
+    if (p?.search) qs.set('search', p.search);
+    return request<ServiceItem[]>(`/services/public?${qs}`);
+  },
+  publicGet: (id: string) => request<ServiceItem>(`/services/public/${id}`),
+
+  // ── Client ──
+  clientList: (p?: { typeId?: string; search?: string }) => {
+    const qs = new URLSearchParams();
+    if (p?.typeId) qs.set('typeId', p.typeId);
+    if (p?.search) qs.set('search', p.search);
+    return request<ServiceItem[]>(`/services/client/list?${qs}`);
+  },
+  clientGet: (id: string) => request<ServiceItem & { isFavorited: boolean }>(`/services/client/${id}`),
+  clientAvailability: (id: string, date: string) =>
+    request<{ available: boolean; availableCount: number; totalCount: number; resources: any[] }>(`/services/client/${id}/availability?date=${date}`),
+  clientQuoteRequest: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/services/client/${id}/quote-request`, { method: 'POST', body: JSON.stringify(body) }),
+  clientEstimate: (id: string, body: Record<string, unknown>) =>
+    request<{ total: number; currency: string; breakdown: { label: string; amount: number }[]; disclaimer: string }>(`/services/client/${id}/estimate`, { method: 'POST', body: JSON.stringify(body) }),
+
+  // ── Favorites ──
+  favorites: () => request<FavoriteService[]>('/services/favorites'),
+  addFavorite: (serviceId: string) =>
+    request<any>(`/services/favorites/${serviceId}`, { method: 'POST' }),
+  removeFavorite: (serviceId: string) =>
+    request<void>(`/services/favorites/${serviceId}`, { method: 'DELETE' }),
+
+  // ── Admin Stats ──
+  stats: () => request<ServiceStats>('/services/admin/stats'),
 };
 
 // ─── Users (admin) ────────────────────────────────────────────────────────────
@@ -264,134 +595,4 @@ export const notificationsApi = {
   list:   (limit = 20) => request<{ data: NeonNotification[]; unread: number }>(`/notifications?limit=${limit}`),
   markRead: (id: string) => request<NeonNotification>(`/notifications/${id}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }) }),
   readAll:  () => request<{ success: boolean }>('/notifications/read-all', { method: 'POST' }),
-};
-
-// ─── Services ───────────────────────────────────────────────────────────────
-
-export interface ServiceType {
-  id: string; name: string; slug: string; icon: string | null; color: string | null;
-  active: boolean; displayOrder: number;
-  _count?: { services: number };
-}
-
-export interface ServiceItem {
-  id: string; name: string; code: string | null; description: string | null;
-  shortDescription: string | null; icon: string | null; image: string | null;
-  basePrice: number; priceMin: number | null; priceMax: number | null;
-  priceType: string; active: boolean; featured: boolean; displayOrder: number;
-  visibleOnStore: boolean; visibleForClients: boolean;
-  minAdvanceDays: number; minDuration: number | null; availabilityMode: string;
-  translations: any; createdAt: string; updatedAt: string;
-  typeId: string | null;
-  type?: ServiceType;
-  resources?: any[];
-  parameters?: any[];
-  packServices?: any[];
-  _count?: { resources: number; parameters: number; packServices: number };
-}
-
-export interface ServiceParameter {
-  id: string; name: string; type: string; options: any; defaultValue: any;
-  required: boolean; displayOrder: number; group: string | null;
-  description: string | null; serviceId: string;
-}
-
-export interface ServiceResource {
-  country: string;
-  id: string; name: string; description: string | null; image: string | null;
-  basePrice: number | null; capacity: number | null;
-  location: string | null; city: string | null;
-  availability: string; active: boolean; displayOrder: number; metadata: any;
-  serviceId: string;
-}
-
-export interface FavoriteService {
-  id: string; createdAt: string; serviceId: string;
-  service: ServiceItem;
-}
-
-export interface ServiceStats {
-  total: number; active: number; featured: number;
-  withResources: number; withPacks: number;
-  popularServices: { id: string; name: string; icon: string | null; packCount: number; resourceCount: number; favoriteCount: number }[];
-}
-
-export const servicesApi = {
-  // ── Types ──
-  types: () => request<ServiceType[]>('/services/types'),
-  createType: (body: { name: string; icon?: string; color?: string; displayOrder?: number }) =>
-    request<ServiceType>('/services/types', { method: 'POST', body: JSON.stringify(body) }),
-  updateType: (id: string, body: Partial<ServiceType>) =>
-    request<ServiceType>(`/services/types/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  deleteType: (id: string) => request<void>(`/services/types/${id}`, { method: 'DELETE' }),
-
-  // ── Admin CRUD ──
-  list: (p?: { page?: number; limit?: number; search?: string; typeId?: string; active?: string; featured?: string }) => {
-    const qs = new URLSearchParams();
-    if (p?.page) qs.set('page', String(p.page));
-    if (p?.limit) qs.set('limit', String(p.limit));
-    if (p?.search) qs.set('search', p.search);
-    if (p?.typeId) qs.set('typeId', p.typeId);
-    if (p?.active) qs.set('active', p.active);
-    if (p?.featured) qs.set('featured', p.featured);
-    return request<{ data: ServiceItem[]; total: number; page: number; limit: number }>(`/services?${qs}`);
-  },
-  get: (id: string) => request<ServiceItem>(`/services/${id}`),
-  create: (body: Partial<ServiceItem>) => request<ServiceItem>('/services', { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: string, body: Partial<ServiceItem>) => request<ServiceItem>(`/services/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  delete: (id: string) => request<void>(`/services/${id}`, { method: 'DELETE' }),
-  toggleStatus: (id: string) => request<ServiceItem>(`/services/${id}/status`, { method: 'PATCH' }),
-  toggleFeatured: (id: string) => request<ServiceItem>(`/services/${id}/featured`, { method: 'PATCH' }),
-
-  // ── Parameters ──
-  getParameters: (serviceId: string) => request<ServiceParameter[]>(`/services/${serviceId}/parameters`),
-  createParameter: (serviceId: string, body: Partial<ServiceParameter>) =>
-    request<ServiceParameter>(`/services/${serviceId}/parameters`, { method: 'POST', body: JSON.stringify(body) }),
-  updateParameter: (id: string, body: Partial<ServiceParameter>) =>
-    request<ServiceParameter>(`/services/service-parameters/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  deleteParameter: (id: string) => request<void>(`/services/service-parameters/${id}`, { method: 'DELETE' }),
-
-  // ── Resources ──
-  getResources: (serviceId: string) => request<ServiceResource[]>(`/services/${serviceId}/resources`),
-  createResource: (serviceId: string, body: Partial<ServiceResource>) =>
-    request<ServiceResource>(`/services/${serviceId}/resources`, { method: 'POST', body: JSON.stringify(body) }),
-  updateResource: (id: string, body: Partial<ServiceResource>) =>
-    request<ServiceResource>(`/services/service-resources/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  deleteResource: (id: string) => request<void>(`/services/service-resources/${id}`, { method: 'DELETE' }),
-
-  // ── Public ──
-  publicCategories: () => request<ServiceType[]>('/services/public/categories'),
-  publicList: (p?: { typeId?: string; featured?: string; search?: string }) => {
-    const qs = new URLSearchParams();
-    if (p?.typeId) qs.set('typeId', p.typeId);
-    if (p?.featured) qs.set('featured', p.featured);
-    if (p?.search) qs.set('search', p.search);
-    return request<ServiceItem[]>(`/services/public?${qs}`);
-  },
-  publicGet: (id: string) => request<ServiceItem>(`/services/public/${id}`),
-
-  // ── Client ──
-  clientList: (p?: { typeId?: string; search?: string }) => {
-    const qs = new URLSearchParams();
-    if (p?.typeId) qs.set('typeId', p.typeId);
-    if (p?.search) qs.set('search', p.search);
-    return request<ServiceItem[]>(`/services/client/list?${qs}`);
-  },
-  clientGet: (id: string) => request<ServiceItem & { isFavorited: boolean }>(`/services/client/${id}`),
-  clientAvailability: (id: string, date: string) =>
-    request<{ available: boolean; availableCount: number; totalCount: number; resources: any[] }>(`/services/client/${id}/availability?date=${date}`),
-  clientQuoteRequest: (id: string, body: Record<string, unknown>) =>
-    request<any>(`/services/client/${id}/quote-request`, { method: 'POST', body: JSON.stringify(body) }),
-  clientEstimate: (id: string, body: Record<string, unknown>) =>
-    request<{ total: number; currency: string; breakdown: { label: string; amount: number }[]; disclaimer: string }>(`/services/client/${id}/estimate`, { method: 'POST', body: JSON.stringify(body) }),
-
-  // ── Favorites ──
-  favorites: () => request<FavoriteService[]>('/services/favorites'),
-  addFavorite: (serviceId: string) =>
-    request<any>(`/services/favorites/${serviceId}`, { method: 'POST' }),
-  removeFavorite: (serviceId: string) =>
-    request<void>(`/services/favorites/${serviceId}`, { method: 'DELETE' }),
-
-  // ── Admin Stats ──
-  stats: () => request<ServiceStats>('/services/admin/stats'),
 };

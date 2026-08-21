@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import {
   LayoutDashboard, Package, FileText, CreditCard, Calendar, User,
-  ScrollText, LifeBuoy, LogOut, Menu, X, ChevronRight, Globe, Layers
+  ScrollText, LifeBuoy, LogOut, Menu, X, ChevronRight, Globe, Layers, UsersRound
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n, type Lang } from '@/lib/i18n';
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/client', icon: LayoutDashboard, label: 'Tableau de bord' as const, end: true },
   { to: '/client/packs', icon: Package, label: 'Mes Packs' as const },
   { to: '/client/services', icon: Layers, label: 'Services' as const },
+  { to: '/client/prestataires', icon: UsersRound, label: 'Prestataires' as const },
   { to: '/client/devis', icon: FileText, label: 'Mes Devis' as const },
   { to: '/client/contrats', icon: ScrollText, label: 'Mes Contrats' as const },
   { to: '/client/paiements', icon: CreditCard, label: 'Mes Paiements' as const },

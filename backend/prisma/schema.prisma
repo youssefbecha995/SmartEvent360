@@ -109,6 +109,7 @@ model User {
   bookings      Booking[]
   notifications Notification[]
   favoriteServices FavoriteService[]
+  providerReviews ProviderReview[]
 
   @@map("users")
 }
@@ -329,6 +330,7 @@ model Service {
 
   parameters  ServiceParameter[]
   resources   ServiceResource[]
+  providers   Provider[]
   packServices PackService[]
   favoriteServices FavoriteService[]
 
@@ -414,11 +416,15 @@ model PackService {
   resourceId String?
   resource   ServiceResource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
 
+  providerId String?
+  provider   Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
 
   @@unique([packId, serviceId])
   @@index([packId])
   @@index([serviceId])
+  @@index([providerId])
   @@map("pack_services")
 }
 
@@ -440,4 +446,125 @@ model FavoriteService {
   @@index([userId])
   @@index([serviceId])
   @@map("favorite_services")
+}
+
+// ─────────────────────────────────────────────
+// Provider (Prestataire — concrete provider of a service)
+// ─────────────────────────────────────────────
+
+model Provider {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  image         String?
+  price         Float    @default(0)
+  originalPrice Float?
+  isAvailable   Boolean  @default(true)
+  rating        Float?
+  reviewCount   Int      @default(0)
+  city          String?
+  address       String?
+  phone         String?
+  email         String?
+  website       String?
+  active        Boolean  @default(true)
+  displayOrder  Int      @default(0)
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  composition   ProviderComposition[]
+  availability  ProviderAvailability[]
+  packServices  PackService[]
+  reviews       ProviderReview[]
+  gallery       ProviderGallery[]
+
+  @@index([serviceId])
+  @@index([active])
+  @@index([city])
+  @@map("providers")
+}
+
+// ─────────────────────────────────────────────
+// ProviderComposition (team composition of a provider)
+// ─────────────────────────────────────────────
+
+model ProviderComposition {
+  id          String   @id @default(cuid())
+  role        String   // "Chanteur", "Musicien", "Photographe", "Cameraman" etc.
+  quantity    Int      @default(1)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@map("provider_compositions")
+}
+
+// ─────────────────────────────────────────────
+// ProviderAvailability (calendar availability per date)
+// ─────────────────────────────────────────────
+
+model ProviderAvailability {
+  id        String   @id @default(cuid())
+  date      DateTime // date only (time ignored)
+  status    String   @default("DISPONIBLE") // DISPONIBLE | RESERVEE | INDISPONIBLE | MAINTENANCE
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, date])
+  @@index([providerId])
+  @@index([date])
+  @@map("provider_availability")
+}
+
+// ─────────────────────────────────────────────
+// ProviderReview (client reviews on providers)
+// ─────────────────────────────────────────────
+
+model ProviderReview {
+  id        String   @id @default(cuid())
+  rating    Int      // 1–5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerId])
+  @@index([providerId])
+  @@index([userId])
+  @@map("provider_reviews")
+}
+
+// ─────────────────────────────────────────────
+// ProviderGallery (photo gallery of providers)
+// ─────────────────────────────────────────────
+
+model ProviderGallery {
+  id        String   @id @default(cuid())
+  imageUrl  String
+  caption   String?
+  displayOrder Int @default(0)
+  createdAt DateTime @default(now())
+
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@map("provider_gallery")
 }

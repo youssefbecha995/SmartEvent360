@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, Plus, CalendarDays, Users, Clock, BadgeDollarSign, MapPin, X, Check, Crown, Settings } from 'lucide-react';
+import { Package, Plus, CalendarDays, Users, Clock, BadgeDollarSign, MapPin, X, Check, Crown, Settings, User } from 'lucide-react';
 import { clientApi } from '@/lib/neonApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/lib/i18n';
@@ -217,6 +217,7 @@ export default function ClientPacks() {
                             <Settings size={10} className="text-dark-500 flex-shrink-0" />
                             <span className="text-white">{ps.service?.name}</span>
                             {ps.resource && <span className="text-dark-500">— {ps.resource.name}</span>}
+                            {ps.provider && <span className="text-blue-400 text-[10px] flex items-center gap-1"><User size={9} />{ps.provider.name}</span>}
                             {ps.quantity > 1 && <span className="text-dark-500">×{ps.quantity}</span>}
                           </div>
                         ))}
