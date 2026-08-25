@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { authenticate } from "../middleware/authenticate";
 import { ensureIncomeForDevis, today } from "../lib/treasury";
 import { notifyAdmins, notifyUser, displayDate, userDisplayName } from "../lib/notify";
+import { buildDevisPdf } from "../lib/devisPdf";
 
 const router = Router();
 router.use(authenticate);
@@ -29,6 +30,31 @@ router.get("/devis/:id", async (req: Request, res: Response) => {
     return;
   }
   res.json(toRecord(row));
+});
+
+// GET /api/client/devis/:id/pdf — télécharger le devis en PDF (client propriétaire ou admin)
+router.get("/devis/:id/pdf", async (req: Request, res: Response) => {
+  const row = await prisma.crmRecord.findUnique({ where: { id: req.params.id } });
+  if (!row || row.kind !== "devis") { res.status(404).json({ error: "Devis not found" }); return; }
+  if (!isOwner(row, req.user!.userId) && req.user!.role !== "ADMIN") {
+    res.status(404).json({ error: "Devis not found" });
+    return;
+  }
+  const data = row.data as any;
+  const client = data.client_id
+    ? await prisma.user.findUnique({
+        where: { id: data.client_id },
+        select: { prenom: true, nom: true, name: true, email: true, phone: true, company: true },
+      })
+    : null;
+  const event = data.event_id ? await prisma.event.findUnique({ where: { id: data.event_id } }) : null;
+
+  const doc = buildDevisPdf(data, client, event);
+  const ref = String(data.reference || data.numero || row.id).replace(/[^A-Za-z0-9_-]/g, "");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="devis-${ref || row.id}.pdf"`);
+  doc.pipe(res);
+  doc.end();
 });
 
 // POST /api/client/devis/:id/accept — le client signe et accepte le devis

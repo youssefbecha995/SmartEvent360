@@ -24,6 +24,34 @@ router.post("/:kind", authenticate, async (req: Request, res: Response) => {
   const { kind } = req.params;
   const data = req.body ?? {};
   const row = await prisma.crmRecord.create({ data: { kind, data } });
+  // Un rendez-vous planifié par l'admin notifie le client concerné
+  if (kind === "appointments") {
+    const appt = data as any;
+    const apptClientId = appt?.client_id;
+    if (apptClientId) {
+      notifyUser(String(apptClientId), {
+        type: "INFO",
+        title: "Nouveau rendez-vous planifié",
+        message: `${appt.titre || "Rendez-vous"} — ${displayDate(appt.date_heure)}${appt.lieu ? ` · ${appt.lieu}` : ""}.`,
+        lien: "/client/rendez-vous",
+      }).catch((e) => console.error("[notify]", e));
+
+      // Email de convocation (si SMTP configuré)
+      prisma.user.findUnique({ where: { id: String(apptClientId) } })
+        .then(async (client) => {
+          if (!client?.email) return;
+          const result = await sendAppointmentConfirmation({
+            to: client.email,
+            clientName: [client.prenom, client.nom, client.name].filter(Boolean).join(" ") || undefined,
+            appointment: appt,
+            statusText: "planifié",
+          });
+          if (!result.sent) console.warn("[mailer]", result.reason);
+        })
+        .catch((e) => console.error("[mailer] client introuvable:", e));
+    }
+  }
+
   // Un devis créé directement au statut "envoye" notifie le client
   if (kind === "devis" && (data as any).statut === "envoye") {
     const clientId = (data as any).client_id;
@@ -71,8 +99,48 @@ router.put("/:kind/:id", authenticate, async (req: Request, res: Response) => {
       }).catch((e) => console.error("[notify]", e));
     }
   }
-  // Un rendez-vous confirmé envoie automatiquement un email de confirmation au client
+  // Un rendez-vous modifié notifie le client (annulation ou report)
   const clientId = (merged as any).client_id as string | undefined;
+  if (req.params.kind === "appointments" && clientId) {
+    const before = existing.data as any;
+    const after = merged as any;
+    const statut = after.statut as string | undefined;
+
+    if (statut === "annule" && before.statut !== "annule") {
+      notifyUser(clientId, {
+        type: "ERROR",
+        title: "Rendez-vous annulé",
+        message: `Votre rendez-vous « ${after.titre || before.titre || ""} » du ${displayDate(before.date_heure)} a été annulé.`,
+        lien: "/client/rendez-vous",
+      }).catch((e) => console.error("[notify]", e));
+    } else if (
+      statut !== "annule" &&
+      after.date_heure && before.date_heure &&
+      String(after.date_heure) !== String(before.date_heure)
+    ) {
+      notifyUser(clientId, {
+        type: "INFO",
+        title: "Rendez-vous reporté",
+        message: `Votre rendez-vous « ${after.titre || before.titre || ""} » est déplacé au ${displayDate(after.date_heure)}.`,
+        lien: "/client/rendez-vous",
+      }).catch((e) => console.error("[notify]", e));
+
+      prisma.user.findUnique({ where: { id: clientId } })
+        .then(async (client) => {
+          if (!client?.email) return;
+          const result = await sendAppointmentConfirmation({
+            to: client.email,
+            clientName: [client.prenom, client.nom, client.name].filter(Boolean).join(" ") || undefined,
+            appointment: { titre: after.titre ?? before.titre, date_heure: after.date_heure, lieu: after.lieu ?? before.lieu, duree_minutes: after.duree_minutes ?? before.duree_minutes },
+            statusText: "reporté",
+          });
+          if (!result.sent) console.warn("[mailer]", result.reason);
+        })
+        .catch((e) => console.error("[mailer] client introuvable:", e));
+    }
+  }
+
+  // Un rendez-vous confirmé envoie automatiquement un email de confirmation au client
   if (req.params.kind === "appointments" && clientId) {
     const statut = (merged as any).statut as string;
     if (statut === "confirme") {
@@ -93,13 +161,6 @@ router.put("/:kind/:id", authenticate, async (req: Request, res: Response) => {
           if (!result.sent) console.warn("[mailer]", result.reason);
         })
         .catch((e) => console.error("[mailer] client introuvable:", e));
-    } else if (statut === "annule") {
-      notifyUser(clientId, {
-        type: "ERROR",
-        title: "Rendez-vous annulé",
-        message: `Votre rendez-vous du ${displayDate((merged as any)?.date_heure) || "(date inconnue)"} a été annulé par notre équipe.`,
-        lien: "/client/rendez-vous",
-      }).catch((e) => console.error("[notify]", e));
     }
   }
   res.json({ id: existing.id, ...merged, income: income ? { id: income.id, ...(income.data as object) } : null });

@@ -36,11 +36,12 @@ export async function sendAppointmentConfirmation(opts: {
   to: string;
   clientName?: string;
   appointment: { titre?: string | null; date_heure?: string | null; lieu?: string | null; duree_minutes?: number | null };
+  statusText?: string;
 }): Promise<{ sent: boolean; reason?: string }> {
   const tr = getTransporter();
   if (!tr) return { sent: false, reason: "SMTP non configuré (SMTP_USER/SMTP_PASS manquants)" };
 
-  const { to, clientName, appointment } = opts;
+  const { to, clientName, appointment, statusText = "confirmé" } = opts;
   const salutation = clientName ? `Bonjour ${clientName},` : "Bonjour,";
   const titre = appointment.titre || "Rendez-vous";
   const date = fmtDateTime(appointment.date_heure);
@@ -55,7 +56,7 @@ export async function sendAppointmentConfirmation(opts: {
       </div>
       <div style="padding:20px 0">
         <p style="font-size:15px">${salutation}</p>
-        <p style="font-size:15px">Votre rendez-vous a été <strong style="color:#1a7f37">confirmé</strong>. Voici le récapitulatif :</p>
+        <p style="font-size:15px">Votre rendez-vous a été <strong style="color:#1a7f37">${statusText}</strong>. Voici le récapitulatif :</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
           <tr><td style="padding:8px 0;color:#666;width:40%">Sujet</td><td style="padding:8px 0;font-weight:600">${titre}</td></tr>
           <tr><td style="padding:8px 0;color:#666">Date &amp; heure</td><td style="padding:8px 0;font-weight:600">${date}</td></tr>

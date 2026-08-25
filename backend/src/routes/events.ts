@@ -54,6 +54,18 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
     }
   }
 
+  // L'organisateur doit exister en base (jeton potentiellement périmé après migration)
+  let organizerId = req.user!.userId;
+  const organizer = await prisma.user.findUnique({ where: { id: organizerId } });
+  if (!organizer) {
+    const fallback = await prisma.user.findFirst({ where: { role: "ADMIN" }, orderBy: { createdAt: "asc" } });
+    if (!fallback) {
+      res.status(401).json({ error: "Session expirée — reconnectez-vous" });
+      return;
+    }
+    organizerId = fallback.id;
+  }
+
   const event = await prisma.event.create({
     data: {
       title,
@@ -65,7 +77,7 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
       price: price ? Number(price) : 0,
       categoryId: categoryId ?? null,
       clientId: clientId ? String(clientId) : null,
-      organizerId: req.user!.userId,
+      organizerId,
     },
     include: eventInclude,
   });

@@ -226,6 +226,8 @@ model Pack {
   translations Json?
   visibleOnStore Boolean @default(true)
   visibleForClients Boolean @default(true)
+  personnel   Json?       // [{ recordId, nom, prenom, fonction, prix, quantite }] équipe du pack
+  equipment   Json?       // [{ recordId, nom, categorie, prix, quantite }] matériel du pack
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 

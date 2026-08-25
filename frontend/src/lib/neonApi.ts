@@ -255,6 +255,8 @@ export interface NeonPack {
   promoEndDate: string | null;
   visibleOnStore: boolean;
   visibleForClients: boolean;
+  personnel?: any[] | null;
+  equipment?: any[] | null;
   createdAt: string;
   updatedAt: string;
   packServices?: NeonPackService[];
@@ -347,6 +349,10 @@ export const packsApi = {
       `/packs/${packId}/calculate-price`,
       { method: 'POST', body: JSON.stringify({ discountPercent }) },
     ),
+  // ── Réservations de packs par les clients (admin) ──
+  reservations: () => request<Record<string, any>[]>('/packs/reservations'),
+  updateReservation: (id: string, statut: string) =>
+    request<Record<string, any>>(`/packs/reservations/${id}`, { method: 'PATCH', body: JSON.stringify({ statut }) }),
 };
 
 // ─── PRESTATAIRES (Providers) API ────────────────────────────────────────────
@@ -540,6 +546,21 @@ export const uploadApi = {
     const fileUrl = data.url as string;
     return { url: `${BASE.replace(/\/api$/, '')}${fileUrl}` };
   },
+
+  image: async (file: File, folder = 'misc'): Promise<{ url: string }> => {
+    const res = await fetch(`${BASE}/uploads?folder=${encodeURIComponent(folder)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+    if (res.status === 401) {
+      clearSessionAndRedirect();
+      throw new Error('Session expirée. Veuillez vous reconnecter.');
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return { url: data.url as string };
+  },
 };
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -553,6 +574,19 @@ export const healthApi = {
 export const clientApi = {
   devis:      () => request<Record<string, any>[]>('/client/devis'),
   devisGet:   (id: string) => request<Record<string, any>>(`/client/devis/${id}`),
+  devisPdf: async (id: string, reference?: string) => {
+    const res = await fetch(`${BASE}/client/devis/${id}/pdf`, { headers: headers(false) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `devis-${reference || id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   acceptDevis: (id: string, signature_data: string) =>
     request<Record<string, any>>(`/client/devis/${id}/accept`, { method: 'POST', body: JSON.stringify({ signature_data }) }),
   refuseDevis: (id: string, reason: string) =>

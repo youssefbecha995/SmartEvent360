@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { authenticate } from "../middleware/authenticate";
+import { ensureIncomeForReservation, removeIncomeForReservation } from "../lib/treasury";
+import { notifyUser } from "../lib/notify";
 
 const router = Router();
 
@@ -48,6 +50,92 @@ router.get("/admin", authenticate, async (req: Request, res: Response) => {
   res.json(packs);
 });
 
+// ── GET /api/packs/reservations — réservations de packs par les clients (ADMIN) ──
+router.get("/reservations", authenticate, async (req: Request, res: Response) => {
+  if (req.user!.role !== "ADMIN") { res.status(403).json({ error: "Forbidden" }); return; }
+  const rows = await prisma.crmRecord.findMany({
+    where: { kind: "client_packs" },
+    orderBy: { createdAt: "desc" },
+  });
+  const userIds = [...new Set(rows.map(r => (r.data as any)?.client_id).filter(Boolean))] as string[];
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, prenom: true, nom: true, name: true, email: true, phone: true },
+      })
+    : [];
+  const umap = new Map(users.map(u => [u.id, u]));
+  const incomeRows = await prisma.crmRecord.findMany({
+    where: { kind: "incomes", OR: rows.map(r => ({ data: { path: ["reservation_id"], equals: r.id } })) },
+    select: { id: true, data: true },
+  });
+  const incomeMap = new Map(
+    incomeRows.map(i => [(i.data as any)?.reservation_id as string, { id: i.id, montant: (i.data as any)?.montant }])
+  );
+  res.json(rows.map(r => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    ...(r.data as object),
+    client: umap.get((r.data as any)?.client_id) ?? null,
+    income: incomeMap.get(r.id) ?? null,
+  })));
+});
+
+// ── PATCH /api/packs/reservations/:id — changer le statut d'une réservation (ADMIN) ──
+// confirme → crée l'encaissement en trésorerie · annule → le retire
+const RESERVATION_STATUTS = ["reserve", "confirme", "paye", "annule"];
+
+router.patch("/reservations/:id", authenticate, async (req: Request, res: Response) => {
+  if (req.user!.role !== "ADMIN") { res.status(403).json({ error: "Forbidden" }); return; }
+  const row = await prisma.crmRecord.findUnique({ where: { id: req.params.id } });
+  if (!row || row.kind !== "client_packs") { res.status(404).json({ error: "Réservation introuvable" }); return; }
+  const statut = req.body?.statut;
+  if (!RESERVATION_STATUTS.includes(statut)) { res.status(400).json({ error: "Statut invalide." }); return; }
+
+  const before = (row.data as any)?.statut;
+  const merged = {
+    ...(row.data as object),
+    statut,
+    date_confirmation: statut === "confirme" ? new Date().toISOString() : (row.data as any)?.date_confirmation ?? null,
+    date_annulation: statut === "annule" ? new Date().toISOString() : (row.data as any)?.date_annulation ?? null,
+  };
+  await prisma.crmRecord.update({ where: { id: row.id }, data: { data: merged } });
+
+  let income = null;
+  // La trésorerie suit le statut : confirmé/payé → encaissement présent, sinon retiré
+  if ((statut === "confirme" || statut === "paye") && before !== statut) {
+    const created = await ensureIncomeForReservation(prisma, { id: row.id, data: merged });
+    income = created ? { id: created.id, ...(created.data as object) } : null;
+  } else if (statut === "reserve" && (before === "confirme" || before === "paye")) {
+    await removeIncomeForReservation(prisma, row.id);
+  } else if (statut === "annule") {
+    await removeIncomeForReservation(prisma, row.id);
+  }
+
+  // Notifier le client du changement de statut de sa réservation
+  const clientId = (merged as any).client_id;
+  if (clientId) {
+    const packName = (merged as any).nom_pack || "votre pack";
+    if (statut === "confirme") {
+      notifyUser(clientId, {
+        type: "SUCCESS",
+        title: "Réservation confirmée",
+        message: `Votre réservation du pack « ${packName} » pour le ${(merged as any).date_debut || ""} est confirmée.`,
+        lien: "/client/packs",
+      }).catch((e) => console.error("[notify]", e));
+    } else if (statut === "annule") {
+      notifyUser(clientId, {
+        type: "ERROR",
+        title: "Réservation annulée",
+        message: `Votre réservation du pack « ${packName} » (${(merged as any).date_debut || ""}) a été annulée par notre équipe.`,
+        lien: "/client/packs",
+      }).catch((e) => console.error("[notify]", e));
+    }
+  }
+
+  res.json({ id: row.id, ...merged, income });
+});
+
 // ── GET /api/packs/:id ────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
   const pack = await prisma.pack.findUnique({
@@ -88,6 +176,7 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
     isSeasonalPromo, promoStartDate, promoEndDate,
     translations, visibleOnStore, visibleForClients,
     services, // Array of { serviceId, resourceId?, quantity?, duration?, status?, config?, displayOrder?, priceOverride? }
+    personnel, equipment, // Array of { recordId?, nom, prenom?, fonction?, categorie?, prix, quantite? }
   } = req.body;
   if (!name || price === undefined) {
     res.status(400).json({ error: "name and price are required" }); return;
@@ -125,6 +214,8 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
       translations: translations ?? null,
       visibleOnStore: visibleOnStore !== false,
       visibleForClients: visibleForClients !== false,
+      ...(Array.isArray(personnel) && { personnel }),
+      ...(Array.isArray(equipment) && { equipment }),
     },
   });
 
@@ -180,6 +271,7 @@ router.put("/:id", authenticate, async (req: Request, res: Response) => {
     isSeasonalPromo, promoStartDate, promoEndDate,
     translations, visibleOnStore, visibleForClients,
     services,
+    personnel, equipment,
   } = req.body;
 
   const pack = await prisma.pack.update({
@@ -216,6 +308,8 @@ router.put("/:id", authenticate, async (req: Request, res: Response) => {
       ...(translations !== undefined && { translations }),
       ...(visibleOnStore !== undefined && { visibleOnStore }),
       ...(visibleForClients !== undefined && { visibleForClients }),
+      ...(Array.isArray(personnel) && { personnel }),
+      ...(Array.isArray(equipment) && { equipment }),
     },
   });
 

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { notifyAdmins, displayDate } from "../lib/notify";
 
 const router = Router();
 
@@ -58,6 +59,31 @@ router.post("/:kind", async (req: Request, res: Response) => {
   if (kind === "appointment_requests" && !data.date_heure) data.date_heure = null;
 
   const row = await prisma.crmRecord.create({ data: { kind, data } });
+
+  // Une demande publique notifie immédiatement les administrateurs
+  const who = [data.prenom, data.nom].filter(Boolean).join(" ") || data.email || "Un visiteur";
+  if (kind === "appointment_requests") {
+    const when = data.date_souhaitee
+      ? `${displayDate(`${data.date_souhaitee}T${data.heure_souhaitee || "00:00"}`)}`
+      : "";
+    notifyAdmins({
+      type: "INFO",
+      title: "Nouvelle demande de rendez-vous",
+      message: `${who} souhaite un rendez-vous${when ? ` le ${when}` : ""}${data.lieu ? ` · ${data.lieu}` : ""}.`,
+      lien: "/admin/rendez-vous",
+    }).catch((e) => console.error("[notify]", e));
+  } else if (kind === "quote_requests") {
+    const when = typeof data.date_evenement === "string" && !data.date_evenement.includes("T")
+      ? data.date_evenement.split("-").reverse().join("/")
+      : displayDate(data.date_evenement);
+    notifyAdmins({
+      type: "INFO",
+      title: "Nouvelle demande de devis",
+      message: `${who} · ${data.type_evenement || "événement"}${when ? ` le ${when}` : ""}${data.ville ? ` · ${data.ville}` : ""}.`,
+      lien: "/admin/devis",
+    }).catch((e) => console.error("[notify]", e));
+  }
+
   res.status(201).json(toRecord(row));
 });
 

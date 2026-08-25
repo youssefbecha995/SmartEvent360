@@ -13,8 +13,8 @@ router.use(express.raw({ type: () => true, limit: "25mb" }));
 const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// POST /api/uploads  (ADMIN — enregistrement vocal d'un appel)
-// Le corps brut contient le fichier audio (audio/webm, audio/ogg, octet-stream).
+// POST /api/uploads  (ADMIN — fichiers audio (appels) ou images)
+// Le corps brut contient le fichier (audio/webm, image/jpeg, ...).
 router.post("/", authenticate, (req: Request, res: Response) => {
   if (req.user!.role !== "ADMIN") { res.status(403).json({ error: "Forbidden" }); return; }
 
@@ -24,24 +24,39 @@ router.post("/", authenticate, (req: Request, res: Response) => {
     return;
   }
 
+  const contentType = req.headers["content-type"]?.split(";")[0]?.trim() || "application/octet-stream";
   const extMap: Record<string, string> = {
     "audio/webm": ".webm",
     "audio/ogg": ".ogg",
     "audio/wav": ".wav",
     "audio/mpeg": ".mp3",
     "audio/mp4": ".m4a",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/avif": ".avif",
   };
-  const contentType = req.headers["content-type"]?.split(";")[0]?.trim() || "application/octet-stream";
   const ext = extMap[contentType] || ".bin";
-  const filename = `call-${crypto.randomUUID()}${ext}`;
+  const isImage = contentType.startsWith("image/");
+  const prefix = isImage ? "img" : "call";
 
-  fs.writeFile(path.join(UPLOAD_DIR, filename), body, (err) => {
+  // Sous-dossier optionnel (?folder=packs) — nettoyé contre la traversée de chemin
+  const rawFolder = String(req.query.folder || "").replace(/[^a-zA-Z0-9_-]/g, "");
+  const subDir = rawFolder ? path.join(UPLOAD_DIR, rawFolder) : UPLOAD_DIR;
+  if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
+
+  const filename = `${prefix}-${crypto.randomUUID()}${ext}`;
+
+  fs.writeFile(path.join(subDir, filename), body, (err) => {
     if (err) {
       console.error("[uploads] write error:", err);
       res.status(500).json({ error: "Failed to save upload" });
       return;
     }
-    res.status(201).json({ url: `/uploads/${filename}`, size: body.length, type: contentType });
+    const urlPath = rawFolder ? `/uploads/${rawFolder}/${filename}` : `/uploads/${filename}`;
+    res.status(201).json({ url: urlPath, size: body.length, type: contentType });
   });
 });
 

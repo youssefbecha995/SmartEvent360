@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, TrendingUp, Ticket, CheckCircle, XCircle, Clock, BarChart2, Plus, X, Loader2, Calendar, User, MapPin, DollarSign } from 'lucide-react';
-import { bookingsApi, eventsApi, usersApi, type NeonEvent, type NeonUser } from '@/lib/neonApi';
+import { bookingsApi, eventsApi, usersApi, packsApi, type NeonEvent, type NeonUser } from '@/lib/neonApi';
 import { useToast } from '@/components/ui/Toast';
 import { SkeletonTable, Skeleton } from '@/components/ui/Skeleton';
 import PageHeader from '@/components/ui/PageHeader';
@@ -28,6 +28,21 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   CANCELLED: { label: 'Annulée', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
 };
 
+interface PackReservation {
+  id: string; statut: string; nom_pack: string; date_debut: string; quantite: number;
+  prix_pack: number; createdAt: string; notes?: string | null;
+  client: { id: string; prenom: string | null; nom: string | null; name: string | null; email: string; phone: string | null } | null;
+  income: { id: string; montant: number } | null;
+}
+
+const PACK_STATUS_OPTIONS = ['reserve', 'confirme', 'paye', 'annule'];
+const PACK_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  reserve: { label: 'En attente', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+  confirme: { label: 'Confirmée', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
+  paye: { label: 'Payée', color: 'bg-gold-500/20 text-gold-400 border-gold-500/30' },
+  annule: { label: 'Annulée', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+};
+
 export default function AdminReservations() {
   const { success, error: toastError } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -35,7 +50,7 @@ export default function AdminReservations() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [tab, setTab] = useState<'list' | 'stats'>('list');
+  const [tab, setTab] = useState<'list' | 'packs' | 'stats'>('list');
   const [clients, setClients] = useState<NeonUser[]>([]);
   const [events, setEvents] = useState<NeonEvent[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -43,8 +58,18 @@ export default function AdminReservations() {
   const [createForm, setCreateForm] = useState({ userId: '', eventId: '', status: 'PENDING' });
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [packReservations, setPackReservations] = useState<PackReservation[]>([]);
+  const [packLoading, setPackLoading] = useState(true);
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` };
+
+  const loadPacks = async () => {
+    setPackLoading(true);
+    try {
+      setPackReservations((await packsApi.reservations()) as PackReservation[]);
+    } catch { setPackReservations([]); }
+    finally { setPackLoading(false); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -75,6 +100,22 @@ export default function AdminReservations() {
       setEvents(evs || []);
     });
   }, []);
+
+  useEffect(() => { loadPacks(); }, []);
+
+  const updatePackStatus = async (r: PackReservation, statut: string) => {
+    try {
+      const updated = await packsApi.updateReservation(r.id, statut);
+      setPackReservations(prev => prev.map(x => x.id === r.id ? { ...x, statut: updated.statut, income: updated.income } : x));
+      if (statut === 'confirme' || statut === 'paye') {
+        success('Réservation confirmée', `Total de ${((Number(r.prix_pack) || 0) * (r.quantite || 1)).toLocaleString('fr-FR')} DT ajouté à la trésorerie`);
+      } else if (statut === 'annule') {
+        success('Réservation annulée', "L'encaissement lié a été retiré de la trésorerie");
+      } else {
+        success('Statut mis à jour');
+      }
+    } catch (e: any) { toastError('Erreur', e.message); }
+  };
 
   const updateStatus = async (id: string, status: string) => {
     try {
@@ -134,7 +175,7 @@ export default function AdminReservations() {
     <div className="p-4 lg:p-6">
       <PageHeader 
         title="Gestion des Réservations" 
-        subtitle={stats ? `${stats.totals.total} réservations au total` : ''}
+        subtitle={`${(stats?.totals.total ?? 0) + packReservations.length} réservations au total · ${stats?.totals.total ?? 0} événement(s) · ${packReservations.length} pack(s)`}
         action={
           <button 
             onClick={() => { setShowCreate(true); setCreateForm({ userId: '', eventId: '', status: 'PENDING' }); }} 
@@ -145,30 +186,38 @@ export default function AdminReservations() {
         } 
       />
 
-      {/* ─── KPIs ─── */}
-      {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: 'Total', value: stats.totals.total, color: 'text-white', bg: 'bg-dark-700', icon: Ticket },
-            { label: 'Confirmées', value: stats.totals.confirmed, color: 'text-green-400', bg: 'bg-green-500/20', icon: CheckCircle },
-            { label: 'En attente', value: stats.totals.pending, color: 'text-yellow-400', bg: 'bg-yellow-500/20', icon: Clock },
-            { label: 'Annulées', value: stats.totals.cancelled, color: 'text-red-400', bg: 'bg-red-500/20', icon: XCircle },
-          ].map((k, i) => (
-            <div key={i} className="glass rounded-xl p-3 text-center">
-              <div className={`w-9 h-9 rounded-xl ${k.bg} flex items-center justify-center mx-auto mb-2`}>
-                <k.icon size={18} className={k.color} />
+      {/* ─── KPIs (événements + packs) ─── */}
+      {(() => {
+        const evTotal = stats?.totals.total ?? 0;
+        const pConf = packReservations.filter(r => r.statut === 'confirme' || r.statut === 'paye').length;
+        const pPend = packReservations.filter(r => r.statut === 'reserve').length;
+        const pCanc = packReservations.filter(r => r.statut === 'annule').length;
+        const kpis = [
+          { label: 'Total', value: evTotal + packReservations.length, color: 'text-white', bg: 'bg-dark-700', icon: Ticket },
+          { label: 'Confirmées', value: (stats?.totals.confirmed ?? 0) + pConf, color: 'text-green-400', bg: 'bg-green-500/20', icon: CheckCircle },
+          { label: 'En attente', value: (stats?.totals.pending ?? 0) + pPend, color: 'text-yellow-400', bg: 'bg-yellow-500/20', icon: Clock },
+          { label: 'Annulées', value: (stats?.totals.cancelled ?? 0) + pCanc, color: 'text-red-400', bg: 'bg-red-500/20', icon: XCircle },
+        ];
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {kpis.map((k, i) => (
+              <div key={i} className="glass rounded-xl p-3 text-center">
+                <div className={`w-9 h-9 rounded-xl ${k.bg} flex items-center justify-center mx-auto mb-2`}>
+                  <k.icon size={18} className={k.color} />
+                </div>
+                <div className={`text-2xl font-bold ${k.color}`}>{k.value}</div>
+                <div className="text-dark-400 text-xs">{k.label}</div>
               </div>
-              <div className={`text-2xl font-bold ${k.color}`}>{k.value}</div>
-              <div className="text-dark-400 text-xs">{k.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })()}
 
       {/* ─── Tabs ─── */}
       <div className="flex gap-2 mb-5">
         {[
-          ['list', '📋 Liste'],
+          ['list', '📋 Événements'],
+          ['packs', '📦 Packs'],
           ['stats', '📊 Statistiques']
         ].map(([v, l]) => (
           <button 
@@ -182,6 +231,76 @@ export default function AdminReservations() {
           </button>
         ))}
       </div>
+
+      {/* ─── Packs tab — réservations de packs par les clients ─── */}
+      {tab === 'packs' && (
+        <div className="glass rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/10">
+                  {['Client', 'Pack', 'Date événement', 'Qté', 'Montant total', 'Trésorerie', 'Statut'].map(h => (
+                    <th key={h} className="text-left px-4 py-3.5 text-dark-400 text-xs font-medium uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {packLoading ? (
+                  <SkeletonTable rows={5} />
+                ) : packReservations.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-12 text-dark-400">
+                      <Ticket size={32} className="mx-auto mb-2 text-dark-600" />
+                      Aucune réservation de pack
+                    </td>
+                  </tr>
+                ) : (
+                  packReservations
+                    .filter(r => `${r.client?.prenom || ''} ${r.client?.nom || ''} ${r.client?.name || ''} ${r.nom_pack}`.toLowerCase().includes(search.toLowerCase()))
+                    .map(r => {
+                      const st = PACK_STATUS_LABELS[r.statut] || PACK_STATUS_LABELS.reserve;
+                      const montantTotal = (Number(r.prix_pack) || 0) * (r.quantite || 1);
+                      return (
+                        <tr key={r.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
+                          <td className="px-4 py-3.5">
+                            <p className="text-white text-sm font-medium">
+                              {[r.client?.prenom, r.client?.nom].filter(Boolean).join(' ') || r.client?.name || '—'}
+                            </p>
+                            <p className="text-dark-400 text-xs">{r.client?.email || '—'}</p>
+                          </td>
+                          <td className="px-4 py-3.5 text-white text-sm">{r.nom_pack || '—'}</td>
+                          <td className="px-4 py-3.5 text-dark-300 text-sm">
+                            {r.date_debut ? new Date(r.date_debut).toLocaleDateString('fr-FR') : '—'}
+                          </td>
+                          <td className="px-4 py-3.5 text-dark-300 text-sm">{r.quantite || 1}</td>
+                          <td className="px-4 py-3.5 text-gold-400 font-bold text-sm">{formatPrice(montantTotal)}</td>
+                          <td className="px-4 py-3.5">
+                            {r.income ? (
+                              <span className="badge border bg-green-500/20 text-green-400 border-green-500/30 text-xs">✓ Encaissé</span>
+                            ) : (
+                              <span className="text-dark-500 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <select
+                              value={r.statut}
+                              onChange={e => updatePackStatus(r, e.target.value)}
+                              className={`badge border rounded-lg px-2 py-1 text-xs cursor-pointer focus:outline-none ${st.color}`}
+                            >
+                              {PACK_STATUS_OPTIONS.map(s => (
+                                <option key={s} value={s} className="bg-dark-800 text-dark-200">{PACK_STATUS_LABELS[s]?.label || s}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ─── Stats tab — événements les plus réservés ─── */}
       {tab === 'stats' && (

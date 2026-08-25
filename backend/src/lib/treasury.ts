@@ -101,3 +101,50 @@ export async function ensureIncomeForEvent(
 
   return prisma.crmRecord.create({ data: { kind: "incomes", data: payload } });
 }
+
+/**
+ * Crée l'encaissement lié à la confirmation d'une réservation de pack
+ * (kind "client_packs"). Idempotent via reservation_id : un seul
+ * encaissement par réservation, même en cas de double confirmation.
+ */
+export async function ensureIncomeForReservation(
+  prisma: PrismaClient,
+  reservation: { id: string; data: Record<string, any> },
+) {
+  const existing = await prisma.crmRecord.findFirst({
+    where: { kind: "incomes", data: { path: ["reservation_id"], equals: reservation.id } },
+  });
+  if (existing) return existing;
+
+  const d = reservation.data ?? {};
+  const montant = (Number(d.prix_pack) || 0) * (Number(d.quantite) || 1);
+  return prisma.crmRecord.create({
+    data: {
+      kind: "incomes",
+      data: {
+        client_id: d.client_id ?? null,
+        event_id: null,
+        type_paiement: "acompte",
+        mode_paiement: "virement",
+        montant,
+        statut: "attente",
+        date_paiement: today(),
+        echeance: d.date_debut || null,
+        reference_facture: `PACK-${String(d.nom_pack || "").slice(0, 20).toUpperCase()}`.replace(/\s+/g, "-"),
+        description: `Réservation pack ${d.nom_pack || ""}${d.date_debut ? ` — ${d.date_debut}` : ""}`.trim(),
+        notes: "Encaissement généré automatiquement à la confirmation de la réservation du pack.",
+        reservation_id: reservation.id,
+      },
+    },
+  });
+}
+
+/** Supprime l'encaissement lié à une réservation de pack (annulation / dé-confirmation). */
+export async function removeIncomeForReservation(prisma: PrismaClient, reservationId: string) {
+  const existing = await prisma.crmRecord.findFirst({
+    where: { kind: "incomes", data: { path: ["reservation_id"], equals: reservationId } },
+  });
+  if (!existing) return null;
+  await prisma.crmRecord.delete({ where: { id: existing.id } });
+  return existing;
+}

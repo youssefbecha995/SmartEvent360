@@ -96,7 +96,7 @@ export default function AdminPersonnel() {
     }
   };
 
-  const filtered = personnel.filter(p => `${p.nom} ${p.prenom} ${p.fonction}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = personnel.filter(p => `${p.nom || ''} ${p.prenom || ''} ${p.fonction || ''}`.toLowerCase().includes(search.toLowerCase()));
 
   const dispoColor = { disponible: 'bg-green-400', mission: 'bg-blue-400', conges: 'bg-yellow-400', absent: 'bg-red-400' };
 
@@ -126,13 +126,13 @@ export default function AdminPersonnel() {
                   <div className="flex items-center gap-3">
                     <div className="relative">
                       <div className="w-11 h-11 rounded-full bg-dark-700 border border-dark-600 flex items-center justify-center text-sm font-bold text-gold-400">
-                        {p.prenom.charAt(0)}{p.nom.charAt(0)}
+                        {(p.prenom || '').charAt(0)}{(p.nom || '').charAt(0)}
                       </div>
                       <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-dark-800 ${(dispoColor as any)[p.disponibilite] || 'bg-gray-400'}`} />
                     </div>
                     <div>
-                      <p className="text-white font-semibold text-sm">{p.prenom} {p.nom}</p>
-                      <p className="text-dark-400 text-xs">{p.fonction}</p>
+                      <p className="text-white font-semibold text-sm">{p.prenom || p.nom || 'Sans nom'}</p>
+                      <p className="text-dark-400 text-xs">{p.fonction || '–'}</p>
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -158,7 +158,7 @@ export default function AdminPersonnel() {
                     {p.specialites.slice(0, 3).map((s: string) => <span key={s} className="badge bg-dark-700 text-dark-300 text-xs">{s}</span>)}
                   </div>
                 )}
-                <select value={p.disponibilite} onChange={e => handleDispo(p.id, e.target.value)}
+                <select value={p.disponibilite || 'disponible'} onChange={e => handleDispo(p.id, e.target.value)}
                   className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-1.5 text-xs text-dark-300 focus:outline-none focus:border-gold-500">
                   {dispoOptions.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
@@ -183,11 +183,11 @@ export default function AdminPersonnel() {
                         {p.type === 'externe' ? t('Externe') : t('Interne')}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 text-white font-medium">{p.prenom} {p.nom}</td>
-                    <td className="px-4 py-3.5 text-dark-300 text-sm">{p.fonction}</td>
-                    <td className="px-4 py-3.5 text-dark-300 text-sm">{p.email}</td>
+                    <td className="px-4 py-3.5 text-white font-medium">{[p.prenom, p.nom].filter(Boolean).join(' ') || 'Sans nom'}</td>
+                    <td className="px-4 py-3.5 text-dark-300 text-sm">{p.fonction || '–'}</td>
+                    <td className="px-4 py-3.5 text-dark-300 text-sm">{p.email || '–'}</td>
                     <td className="px-4 py-3.5 text-dark-300 text-sm">{p.telephone || '–'}</td>
-                    <td className="px-4 py-3.5"><StatusBadge status={p.disponibilite} /></td>
+                    <td className="px-4 py-3.5"><StatusBadge status={p.disponibilite || 'disponible'} /></td>
                     <td className="px-4 py-3.5 text-dark-300 text-sm">{paiementLabel(p)}</td>
                     <td className="px-4 py-3.5">
                       <div className="flex gap-1">

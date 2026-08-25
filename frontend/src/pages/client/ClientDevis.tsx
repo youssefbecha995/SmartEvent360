@@ -39,6 +39,13 @@ export default function ClientDevis() {
 
   const signerName = user?.email || '';
 
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const handleDownload = async (d: any) => {
+    setDownloading(d.id);
+    await clientApi.devisPdf(d.id, d.reference).catch(() => {});
+    setDownloading(null);
+  };
+
   const handleSignAccept = async (dataUrl: string) => {
     if (!signing) return;
     setSaving(true);
@@ -108,7 +115,7 @@ export default function ClientDevis() {
                     <td className="px-5 py-4 text-center"><StatusBadge status={d.statut} /></td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                        <button className="text-dark-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-all"><Download size={15} /></button>
+                        <button onClick={() => handleDownload(d)} disabled={downloading === d.id} title="Télécharger en PDF" className="text-dark-400 hover:text-gold-400 p-1.5 rounded-lg hover:bg-white/5 transition-all disabled:opacity-50"><Download size={15} /></button>
                         {d.statut === 'envoye' && (
                           <>
                             <button onClick={() => setSigning(d)} className="text-green-400 hover:bg-green-500/10 p-1.5 rounded-lg transition-all"><Check size={15} /></button>
@@ -137,6 +144,9 @@ export default function ClientDevis() {
                   <h2 className="text-xl font-bold text-gold-500">{selected.reference}</h2>
                 </div>
                 <div className="flex items-center gap-3">
+                  <button onClick={() => handleDownload(selected)} disabled={downloading === selected.id} className="flex items-center gap-1.5 text-sm text-dark-300 hover:text-gold-400 border border-white/10 hover:border-gold-500/40 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50">
+                    <Download size={14} /> PDF
+                  </button>
                   <StatusBadge status={selected.statut} />
                   <button onClick={() => setSelected(null)} className="text-dark-400 hover:text-white"><XIcon size={18} /></button>
                 </div>

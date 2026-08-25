@@ -13,6 +13,7 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { packsApi, servicesApi, providersApi, uploadApi, NeonPack, ServiceItem, Provider } from '@/lib/neonApi';
+import { crmApi } from '@/lib/crmApi';
 import { formatPrice } from '@/lib/format';
 import PageHeader from '@/components/ui/PageHeader';
 
@@ -344,7 +345,15 @@ export default function AdminPacks() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const [activeTab, setActiveTab] = useState<'general' | 'media' | 'services' | 'pricing'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'media' | 'services' | 'team' | 'pricing'>('general');
+
+  // ─── Équipe & Matériel du pack ────────────────────────────────
+  const [selectedPersonnel, setSelectedPersonnel] = useState<any[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState<any[]>([]);
+  const [catalogPersonnel, setCatalogPersonnel] = useState<any[]>([]);
+  const [catalogEquipment, setCatalogEquipment] = useState<any[]>([]);
+  const [teamSearchP, setTeamSearchP] = useState('');
+  const [teamSearchE, setTeamSearchE] = useState('');
 
   // ─── Services du pack ───────────────────────────────────────────
   const [selectedServices, setSelectedServices] = useState<any[]>([]);
@@ -385,6 +394,59 @@ export default function AdminPacks() {
 
   useEffect(() => { load(); }, []);
 
+  // ─── Chargement du catalogue personnel / équipement ────────────
+  const loadTeamCatalog = async () => {
+    try {
+      const [p, e] = await Promise.all([
+        crmApi.list('personnel').catch(() => []),
+        crmApi.list('equipment').catch(() => []),
+      ]);
+      setCatalogPersonnel(p);
+      setCatalogEquipment(e);
+    } catch {
+      setCatalogPersonnel([]);
+      setCatalogEquipment([]);
+    }
+  };
+
+  const addPackPersonnel = (p: any) => {
+    if (selectedPersonnel.some(x => x.recordId === p.id)) return;
+    setSelectedPersonnel(prev => [...prev, {
+      recordId: p.id,
+      nom: p.nom, prenom: p.prenom || '', fonction: p.fonction || '',
+      prix: Number(p.salaire) || 0,
+      quantite: 1,
+    }]);
+  };
+
+  const addPackEquipment = (e: any) => {
+    if (selectedEquipment.some(x => x.recordId === e.id)) return;
+    setSelectedEquipment(prev => [...prev, {
+      recordId: e.id,
+      nom: e.nom, categorie: e.categorie || '',
+      prix: Number(e.prix_location) || 0,
+      quantite: 1,
+    }]);
+  };
+
+  const updateSelectedPersonnel = (recordId: string, field: 'prix' | 'quantite', value: string) => {
+    setSelectedPersonnel(prev => prev.map(p =>
+      p.recordId === recordId ? { ...p, [field]: Math.max(0, Number(value) || 0) } : p
+    ));
+  };
+
+  const updateSelectedEquipment = (recordId: string, field: 'prix' | 'quantite', value: string) => {
+    setSelectedEquipment(prev => prev.map(e =>
+      e.recordId === recordId ? { ...e, [field]: Math.max(0, Number(value) || 0) } : e
+    ));
+  };
+
+  const removePackPersonnel = (recordId: string) =>
+    setSelectedPersonnel(prev => prev.filter(p => p.recordId !== recordId));
+
+  const removePackEquipment = (recordId: string) =>
+    setSelectedEquipment(prev => prev.filter(e => e.recordId !== recordId));
+
   // ─── Calcul du prix ────────────────────────────────────────────
   const calculateTotalServicesPrice = () => {
     let total = 0;
@@ -395,6 +457,8 @@ export default function AdminPacks() {
       const quantity = Number(config.quantity) || 1;
       total += price * quantity;
     }
+    for (const p of selectedPersonnel) total += (Number(p.prix) || 0) * (Number(p.quantite) || 1);
+    for (const e of selectedEquipment) total += (Number(e.prix) || 0) * (Number(e.quantite) || 1);
     return total;
   };
 
@@ -410,7 +474,7 @@ export default function AdminPacks() {
         price: String(Math.round(packPrice))
       }));
     }
-  }, [selectedServices, packServicesConfig, form.discountPercent]);
+  }, [selectedServices, packServicesConfig, selectedPersonnel, selectedEquipment, form.discountPercent]);
 
   // ─── CRUD Pack ──────────────────────────────────────────────────
   const openCreate = () => {
@@ -418,8 +482,13 @@ export default function AdminPacks() {
     setForm({ ...emptyForm, priceAutoCalculated: true });
     setSelectedServices([]);
     setPackServicesConfig({});
+    setSelectedPersonnel([]);
+    setSelectedEquipment([]);
+    setTeamSearchP('');
+    setTeamSearchE('');
     setFormError('');
     setActiveTab('general');
+    loadTeamCatalog();
     setShowModal(true);
   };
 
@@ -445,11 +514,16 @@ export default function AdminPacks() {
       visibleOnStore: p.visibleOnStore !== undefined ? p.visibleOnStore : true,
       visibleForClients: p.visibleForClients !== undefined ? p.visibleForClients : true,
       discountPercent: '0',
-      priceAutoCalculated: true,
+      priceAutoCalculated: false,
     });
     setSelectedServices(p.packServices || []);
+    setSelectedPersonnel(Array.isArray(p.personnel) ? p.personnel : []);
+    setSelectedEquipment(Array.isArray(p.equipment) ? p.equipment : []);
+    setTeamSearchP('');
+    setTeamSearchE('');
     setFormError('');
     setActiveTab('general');
+    loadTeamCatalog();
     setShowModal(true);
   };
 
@@ -484,6 +558,14 @@ export default function AdminPacks() {
         isCustomizable: form.isCustomizable,
         visibleOnStore: form.visibleOnStore,
         visibleForClients: form.visibleForClients,
+        personnel: selectedPersonnel.map(p => ({
+          recordId: p.recordId, nom: p.nom, prenom: p.prenom, fonction: p.fonction,
+          prix: Number(p.prix) || 0, quantite: Number(p.quantite) || 1,
+        })),
+        equipment: selectedEquipment.map(e => ({
+          recordId: e.recordId, nom: e.nom, categorie: e.categorie,
+          prix: Number(e.prix) || 0, quantite: Number(e.quantite) || 1,
+        })),
       };
 
       if (editing) {
@@ -927,6 +1009,7 @@ export default function AdminPacks() {
                 { key: 'general', label: '📝 Général', icon: FileText },
                 { key: 'media', label: '🖼️ Médias', icon: ImageIcon },
                 { key: 'services', label: `📦 Services (${selectedServices.length})`, icon: Package },
+                { key: 'team', label: `👥 Équipe & Matériel (${selectedPersonnel.length + selectedEquipment.length})`, icon: Users },
                 { key: 'pricing', label: '💰 Tarification', icon: Calculator },
               ].map(tab => (
                 <button
@@ -1158,6 +1241,175 @@ export default function AdminPacks() {
                 </div>
               )}
 
+              {/* Tab: Équipe & Matériel */}
+              {activeTab === 'team' && (
+                <div className="space-y-6">
+                  {/* ── Personnel ── */}
+                  <div>
+                    <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
+                      <Users size={16} className="text-gold-400" /> Personnel du pack ({selectedPersonnel.length})
+                    </h3>
+
+                    {selectedPersonnel.length > 0 && (
+                      <div className="space-y-2 mb-4">
+                        {selectedPersonnel.map(p => (
+                          <div key={p.recordId} className="glass rounded-xl px-4 py-2.5 border border-white/5 flex items-center gap-3 flex-wrap">
+                            <div className="flex-1 min-w-[140px]">
+                              <p className="text-white text-sm font-medium">{p.prenom} {p.nom}</p>
+                              <p className="text-dark-400 text-xs">{p.fonction}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-dark-500 text-xs">Prix</label>
+                              <input
+                                type="number" min="0"
+                                value={p.prix}
+                                onChange={e => updateSelectedPersonnel(p.recordId, 'prix', e.target.value)}
+                                className="input-field w-24 py-1.5 px-2 text-sm"
+                              />
+                              <label className="text-dark-500 text-xs ml-1">Qté</label>
+                              <input
+                                type="number" min="1"
+                                value={p.quantite}
+                                onChange={e => updateSelectedPersonnel(p.recordId, 'quantite', e.target.value)}
+                                className="input-field w-16 py-1.5 px-2 text-sm"
+                              />
+                              <span className="text-gold-400 text-xs font-medium w-20 text-right">
+                                {formatPrice((Number(p.prix) || 0) * (Number(p.quantite) || 1))}
+                              </span>
+                              <button
+                                onClick={() => removePackPersonnel(p.recordId)}
+                                className="p-1.5 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                title="Retirer"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex justify-end">
+                          <span className="text-dark-300 text-xs">
+                            Sous-total personnel : <span className="text-gold-400 font-medium">{formatPrice(selectedPersonnel.reduce((s, p) => s + (Number(p.prix) || 0) * (Number(p.quantite) || 1), 0))}</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <input
+                      value={teamSearchP}
+                      onChange={e => setTeamSearchP(e.target.value)}
+                      placeholder="Rechercher : guitariste, pianiste, chanteur, photographe..."
+                      className="input-field w-full py-2 text-sm mb-2"
+                    />
+                    <div className="max-h-56 overflow-y-auto space-y-1.5 glass rounded-xl p-2 border border-dashed border-dark-600">
+                      {catalogPersonnel.filter(p =>
+                        !selectedPersonnel.some(s => s.recordId === p.id) &&
+                        `${p.nom} ${p.prenom} ${p.fonction}`.toLowerCase().includes(teamSearchP.toLowerCase())
+                      ).length === 0 ? (
+                        <p className="text-dark-500 text-xs text-center py-4">Aucun personnel disponible — gérez l'équipe dans « Personnel »</p>
+                      ) : catalogPersonnel.filter(p =>
+                        !selectedPersonnel.some(s => s.recordId === p.id) &&
+                        `${p.nom} ${p.prenom} ${p.fonction}`.toLowerCase().includes(teamSearchP.toLowerCase())
+                      ).map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => addPackPersonnel(p)}
+                          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gold-500/10 transition-all text-left group"
+                        >
+                          <PlusCircle size={15} className="text-dark-400 group-hover:text-gold-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm">{p.prenom} {p.nom}</p>
+                            <p className="text-dark-400 text-xs">{p.fonction}</p>
+                          </div>
+                          <span className="text-gold-400/70 text-xs">{Number(p.salaire) > 0 ? formatPrice(p.salaire) : '–'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Matériel ── */}
+                  <div>
+                    <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
+                      <Package size={16} className="text-gold-400" /> Matériel du pack ({selectedEquipment.length})
+                    </h3>
+
+                    {selectedEquipment.length > 0 && (
+                      <div className="space-y-2 mb-4">
+                        {selectedEquipment.map(e => (
+                          <div key={e.recordId} className="glass rounded-xl px-4 py-2.5 border border-white/5 flex items-center gap-3 flex-wrap">
+                            <div className="flex-1 min-w-[140px]">
+                              <p className="text-white text-sm font-medium">{e.nom}</p>
+                              <p className="text-dark-400 text-xs">{e.categorie}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-dark-500 text-xs">Prix</label>
+                              <input
+                                type="number" min="0"
+                                value={e.prix}
+                                onChange={ev => updateSelectedEquipment(e.recordId, 'prix', ev.target.value)}
+                                className="input-field w-24 py-1.5 px-2 text-sm"
+                              />
+                              <label className="text-dark-500 text-xs ml-1">Qté</label>
+                              <input
+                                type="number" min="1"
+                                value={e.quantite}
+                                onChange={ev => updateSelectedEquipment(e.recordId, 'quantite', ev.target.value)}
+                                className="input-field w-16 py-1.5 px-2 text-sm"
+                              />
+                              <span className="text-gold-400 text-xs font-medium w-20 text-right">
+                                {formatPrice((Number(e.prix) || 0) * (Number(e.quantite) || 1))}
+                              </span>
+                              <button
+                                onClick={() => removePackEquipment(e.recordId)}
+                                className="p-1.5 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                title="Retirer"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex justify-end">
+                          <span className="text-dark-300 text-xs">
+                            Sous-total matériel : <span className="text-gold-400 font-medium">{formatPrice(selectedEquipment.reduce((s, e) => s + (Number(e.prix) || 0) * (Number(e.quantite) || 1), 0))}</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <input
+                      value={teamSearchE}
+                      onChange={e => setTeamSearchE(e.target.value)}
+                      placeholder="Rechercher : guitare, piano, micro, baffles, câbles, ampli, appareil photo..."
+                      className="input-field w-full py-2 text-sm mb-2"
+                    />
+                    <div className="max-h-56 overflow-y-auto space-y-1.5 glass rounded-xl p-2 border border-dashed border-dark-600">
+                      {catalogEquipment.filter(e =>
+                        !selectedEquipment.some(s => s.recordId === e.id) &&
+                        `${e.nom} ${e.reference || ''} ${e.categorie || ''}`.toLowerCase().includes(teamSearchE.toLowerCase())
+                      ).length === 0 ? (
+                        <p className="text-dark-500 text-xs text-center py-4">Aucun équipement disponible — gérez le parc dans « Équipements »</p>
+                      ) : catalogEquipment.filter(e =>
+                        !selectedEquipment.some(s => s.recordId === e.id) &&
+                        `${e.nom} ${e.reference || ''} ${e.categorie || ''}`.toLowerCase().includes(teamSearchE.toLowerCase())
+                      ).map(e => (
+                        <button
+                          key={e.id}
+                          onClick={() => addPackEquipment(e)}
+                          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gold-500/10 transition-all text-left group"
+                        >
+                          <PlusCircle size={15} className="text-dark-400 group-hover:text-gold-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm truncate">{e.nom}</p>
+                            <p className="text-dark-400 text-xs">{e.categorie} {e.reference ? `· ${e.reference}` : ''}</p>
+                          </div>
+                          <span className="text-gold-400/70 text-xs">{Number(e.prix_location) > 0 ? formatPrice(e.prix_location) + '/j' : '–'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Tab: Tarification */}
               {activeTab === 'pricing' && (
                 <div className="space-y-5">
@@ -1171,16 +1423,36 @@ export default function AdminPacks() {
                       />
                       Calcul automatique du prix
                     </label>
-                    <span className="text-dark-500 text-xs">Le prix est calculé à partir des services</span>
+                    <span className="text-dark-500 text-xs">Le prix est calculé à partir des services, de l'équipe et du matériel</span>
                   </div>
 
-                  {selectedServices.length > 0 && (
+                  {(selectedServices.length > 0 || selectedPersonnel.length > 0 || selectedEquipment.length > 0) && (
                     <div className="glass rounded-xl p-4 bg-dark-700/50 border border-gold-500/20">
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-dark-300">💰 Total des services</span>
-                          <span className="text-white font-medium">{formatPrice(totalServicesPrice)}</span>
-                        </div>
+                        {selectedServices.length > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-dark-300">📦 Total des services</span>
+                            <span className="text-white font-medium">
+                              {formatPrice(selectedServices.reduce((s, item) => {
+                                const config = packServicesConfig[item.id || item.serviceId] || {};
+                                const price = config.priceOverride ? Number(config.priceOverride) : (item.provider?.price || item.basePrice || 0);
+                                return s + price * (Number(config.quantity) || 1);
+                              }, 0))}
+                            </span>
+                          </div>
+                        )}
+                        {selectedPersonnel.length > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-dark-300">👥 Total personnel</span>
+                            <span className="text-white font-medium">{formatPrice(selectedPersonnel.reduce((s, p) => s + (Number(p.prix) || 0) * (Number(p.quantite) || 1), 0))}</span>
+                          </div>
+                        )}
+                        {selectedEquipment.length > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-dark-300">🔊 Total matériel</span>
+                            <span className="text-white font-medium">{formatPrice(selectedEquipment.reduce((s, e) => s + (Number(e.prix) || 0) * (Number(e.quantite) || 1), 0))}</span>
+                          </div>
+                        )}
                         {discount > 0 && (
                           <div className="flex items-center justify-between text-sm text-green-400">
                             <span>📉 Remise ({discount}%)</span>
