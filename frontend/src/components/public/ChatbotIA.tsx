@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Minimize2, Maximize2, Bot } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { request } from '@/lib/neonApi';
 
 interface Message {
   from: 'bot' | 'user';
   text: string;
-  options?: { label: string; value: string; action?: string }[];
+  options?: { label: string; value: string; action?: string; path?: string }[];
   timestamp: Date;
 }
 
@@ -32,12 +33,59 @@ const CONTEXT_MESSAGES: Record<string, string> = {
   '/': 'Bonjour ! Vous visitez notre page d\'accueil. Puis-je vous aider à choisir un pack ou à préparer votre demande de devis ?',
   '/services': 'Besoin d\'aide pour choisir un service ? Je peux vous guider selon votre type d\'événement.',
   '/packs': 'Quel pack correspond le mieux à votre événement ? Je peux vous aider à choisir !',
+  '/prestataires': 'Vous cherchez un prestataire ? Je peux vous orienter selon votre événement.',
   '/a-propos': 'En savoir plus sur notre histoire ? N\'hésitez pas à me poser vos questions.',
   '/contact': 'Vous avez une question ? Je suis là pour vous aider avant que vous remplissiez le formulaire.',
   '/devis': 'Je peux vous guider pour remplir ce formulaire ! Commençons par quelques questions rapides.',
 };
 
-export default function ChatbotIA() {
+// Contexte et actions pour l'espace client connecté
+const CLIENT_CONTEXT_MESSAGES: Record<string, string> = {
+  '/client': 'Bonjour ! J\'ai accès à votre compte. Je peux vous renseigner sur vos devis, paiements, packs et rendez-vous. Que souhaitez-vous savoir ?',
+  '/client/packs': 'Voici vos packs réservés. Je peux vous dire le statut de chaque réservation.',
+  '/client/services': 'Besoin d\'un service supplémentaire pour votre événement ? Je peux vous orienter.',
+  '/client/prestataires': 'Vous cherchez un prestataire pour votre événement ? Je peux vous guider.',
+  '/client/devis': 'Je peux vous donner le statut de vos devis et vous aider à les accepter ou télécharger.',
+  '/client/contrats': 'Vos contrats sont accessibles ici. Je peux vous expliquer ce qu\'ils incluent.',
+  '/client/paiements': 'Je peux vous indiquer vos encaissements et le total réglé.',
+  '/client/rendez-vous': 'Je connais vos rendez-vous à venir. Demandez-moi lequel vous concerne.',
+  '/client/profil': 'Je peux vous aider à comprendre et mettre à jour vos informations personnelles.',
+  '/client/support': 'Décrivez votre problème, je vous oriente vers la bonne page ou vers notre équipe.',
+};
+
+// Contexte et actions pour l'espace admin (données de gestion)
+const ADMIN_CONTEXT_MESSAGES: Record<string, string> = {
+  '/admin': 'Bonjour ! J\'ai accès à vos données de gestion : chiffre d\'affaires, devis, réservations, trésorerie. Que souhaitez-vous analyser ?',
+  '/admin/reservations': 'Je peux vous détailler les réservations de packs et leur statut.',
+  '/admin/devis': 'Je connais vos devis : statuts, montants et taux d\'acceptation.',
+  '/admin/tresorerie': 'Je peux vous expliquer le chiffre d\'affaires, les charges et le solde.',
+  '/admin/clients': 'Je peux vous donner une vue d\'ensemble de vos clients.',
+  '/admin/evenements': 'Je connais vos événements et leur préparation.',
+  '/admin/personnel': 'Vous avez besoin de votre effectif ? Demandez-moi le détail.',
+  '/admin/equipements': 'Je peux vous lister le matériel disponible.',
+  '/admin/packs': 'Voici vos packs au catalogue. Demandez-moi le détail.',
+  '/admin/rendez-vous': 'Je connais vos rendez-vous et ceux qui attendent une confirmation.',
+  '/admin/services': 'Besoin d\'un aperçu de vos services proposés ?',
+  '/admin/prestataires': 'Je peux vous rappeler quels prestataires sont référencés.',
+  '/admin/appels': 'Je peux vous indiquer les appels et dossiers à relancer.',
+  '/admin/calendrier': 'Je peux vous situer par rapport aux échéances à venir.',
+  '/admin/parametres': 'Besoin d\'aide avec les paramètres de la plateforme ?',
+};
+
+// Actions rapides suggérées selon le mode
+const ADMIN_QUICK_ACTIONS = [
+  { label: '💰 Chiffre d\'affaires', value: 'ca', action: 'goto', path: '/admin/tresorerie' },
+  { label: '📦 Réservations', value: 'reservations', action: 'goto', path: '/admin/reservations' },
+  { label: '📊 Tableau de bord', value: 'dashboard', action: 'goto', path: '/admin' },
+  { label: '💬 Poser une question', value: 'question', action: 'open' },
+];
+
+interface ChatbotProps {
+  /** "public" = site vitrine · "client" = espace client connecté · "admin" = back-office */
+  mode?: 'public' | 'client' | 'admin';
+}
+
+export default function ChatbotIA({ mode = 'public' }: ChatbotProps) {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [step, setStep] = useState<Step>('welcome');
@@ -49,8 +97,12 @@ export default function ChatbotIA() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const pathname = window.location.pathname;
-  const contextMsg = CONTEXT_MESSAGES[pathname] || CONTEXT_MESSAGES['/'];
+  const location = useLocation();
+  const isClientMode = mode === 'client';
+  const isAdminMode = mode === 'admin';
+  const contextTable = isAdminMode ? ADMIN_CONTEXT_MESSAGES : isClientMode ? CLIENT_CONTEXT_MESSAGES : CONTEXT_MESSAGES;
+  const contextMsg = contextTable[location.pathname]
+    || (isAdminMode ? ADMIN_CONTEXT_MESSAGES['/admin'] : isClientMode ? CLIENT_CONTEXT_MESSAGES['/client'] : CONTEXT_MESSAGES['/']);
 
   // Show bubble after 3s
   useEffect(() => {
@@ -83,20 +135,36 @@ export default function ChatbotIA() {
         addMessage({
           from: 'bot',
           text: contextMsg,
-          options: [
-            { label: '🎯 Préparer un devis', value: 'devis', action: 'start_devis' },
-            { label: '📦 Voir les packs', value: 'packs', action: 'packs' },
-            { label: '💬 Poser une question', value: 'question', action: 'open' },
-          ],
+          options: isAdminMode
+            ? ADMIN_QUICK_ACTIONS
+            : isClientMode
+            ? [
+                { label: '📄 Mes devis', value: 'devis', action: 'goto', path: '/client/devis' },
+                { label: '📦 Mes packs', value: 'packs', action: 'goto', path: '/client/packs' },
+                { label: '💳 Mes paiements', value: 'paiements', action: 'goto', path: '/client/paiements' },
+                { label: '💬 Poser une question', value: 'question', action: 'open' },
+              ]
+            : [
+                { label: '🎯 Préparer un devis', value: 'devis', action: 'start_devis' },
+                { label: '📦 Voir les packs', value: 'packs', action: 'packs' },
+                { label: '💬 Poser une question', value: 'question', action: 'open' },
+              ],
         });
       }, 300);
     }
   };
 
-  const handleOption = (opt: { label: string; value: string; action?: string }) => {
+  const handleOption = (opt: { label: string; value: string; action?: string; path?: string }) => {
     addMessage({ from: 'user', text: opt.label });
 
-    if (opt.action === 'start_devis') {
+    if (opt.action === 'goto') {
+      setStep('open');
+      setTimeout(() => addMessage({
+        from: 'bot',
+        text: 'Vous allez être redirigé. Besoin d\'une précision en chemin ?',
+        options: [{ label: '💬 Poser une question', value: 'question', action: 'open' }],
+      }), 300);
+    } else if (opt.action === 'start_devis') {
       setStep('type');
       setTimeout(() => addMessage({
         from: 'bot', text: 'Quel type d\'événement souhaitez-vous organiser ?',
@@ -172,22 +240,52 @@ export default function ChatbotIA() {
     }
   };
 
+  const [thinking, setThinking] = useState(false);
+
+  /** Réponse locale si l'API IA est injoignable */
+  const localReply = (text: string): string => {
+    if (isAdminMode) {
+      if (/chiffre|ca\b|revenu|recette|gagn/i.test(text)) return 'Le chiffre d\'affaires total, les charges et le solde sont détaillés dans « Trésorerie ». Vous pouvez me demander le montant du mois en cours, le total encaissé ou le solde net.';
+      if (/réserv|reserv/i.test(text)) return 'Vos réservations de packs (statut, date, client) sont dans « Réservations ». Chaque changement de statut génère ou retire automatiquement l\'encaissement correspondant.';
+      if (/devis/i.test(text)) return 'Vos devis sont dans « Devis » avec leur statut : envoyé, accepté ou refusé. Je peux aussi vous dire le taux d\'acceptation ou le montant total.';
+      if (/client/i.test(text)) return 'La liste complète de vos clients est dans « Clients ». Je peux vous indiquer le nombre de clients enregistrés et leurs dernières demandes.';
+      if (/rendez-vous|rdv/i.test(text)) return 'Vos rendez-vous sont dans « Rendez-vous » : je peux vous préciser ceux qui sont à venir et ceux qui attendent une confirmation.';
+      if (/équipement|equipement|matériel|materiel|personnel/i.test(text)) return 'Le détail de vos équipements et de votre personnel est dans les pages « Équipements » et « Personnel ».';
+      return 'Je peux vous renseigner sur le **chiffre d\'affaires**, les **devis**, les **réservations**, la **trésorerie** et vos **clients**. Que souhaitez-vous analyser ?';
+    }
+    if (isClientMode) {
+      if (/devis/i.test(text)) return 'Vos devis sont dans « Mes Devis » : vous pouvez les télécharger en PDF, puis les accepter ou refuser. Besoin du statut d\'un devis en particulier ? Donnez-moi sa référence.';
+      if (/paiement|régler|regler|acompte|facture/i.test(text)) return 'Le détail de vos encaissements est dans « Mes Paiements ». Un encaissement est généré automatiquement dès qu\'un devis est accepté — toute annulation le retire.';
+      if (/pack|réserv|reserv/i.test(text)) return 'Vos réservations de packs (date, quantité, statut) sont dans « Mes Packs ». Notre équipe confirme chaque réservation et vous êtes notifié.';
+      if (/rendez-vous|rdv|rencontre/i.test(text)) return 'Vos rendez-vous sont dans « Mes Rendez-vous » : statut, date et lieu de chaque rendez-vous. Notre équipe vous notifie dès qu\'un rendez-vous est confirmé, reporté ou annulé.';
+      return 'Je peux vous renseigner sur vos **devis**, **paiements**, **packs**, **contrats** et **rendez-vous**. Que souhaitez-vous savoir ?';
+    }
+    let reply = 'Je vais transmettre votre question à notre équipe. Vous pouvez aussi nous écrire via la page Contact.';
+    if (/prix|tarif|coût|coute/i.test(text)) reply = 'Nos tarifs varient selon les packs : Bronze 950 DT, Silver 1 500 DT, Gold 3 200 DT, VIP 5 500 DT. Voulez-vous une estimation personnalisée ?';
+    if (/mariage/i.test(text)) reply = 'Pour un mariage, nous recommandons le Pack Gold ou VIP. Ils incluent son, lumière, DJ, avec possibilité d\'ajouter photographe et vidéaste.';
+    if (/délai|délai|urgent|rapidement/i.test(text)) reply = 'Nous intervenons avec un préavis de 14 jours minimum. Pour un événement urgent, contactez-nous via la page Contact.';
+    if (/disponib/i.test(text)) reply = 'Pour vérifier nos disponibilités sur une date précise, soumettez une demande de devis avec votre date souhaitée.';
+    if (/paiement|acompte/i.test(text)) reply = 'Nous demandons un acompte de 50 % à la signature du contrat, le solde 30 jours avant l\'événement. Paiement par carte, virement ou chèque.';
+    if (/devis/i.test(text)) reply = 'Je peux vous aider à préparer votre devis : dites-moi votre type d\'événement, le nombre d\'invités et votre budget.';
+    return reply;
+  };
+
   const handleSend = () => {
-    if (!input.trim()) return;
+    if (!input.trim() || thinking) return;
     const text = input.trim();
     setInput('');
     addMessage({ from: 'user', text });
+    setThinking(true);
 
-    // Simple keyword-based responses
-    setTimeout(() => {
-      let reply = 'Je vais transmettre votre question à notre équipe. Vous pouvez aussi nous contacter directement au +33 1 23 45 67 89.';
-      if (/prix|tarif|coût|coute/i.test(text)) reply = 'Nos tarifs varient selon les packs : Bronze 950DT, Silver 1 500DT, Gold 3 200DT, VIP 5 500DT. Voulez-vous une estimation personnalisée ?';
-      if (/mariage/i.test(text)) reply = 'Pour un mariage, nous recommandons le Pack Gold ou VIP. Ils incluent son, lumière, DJ et possibilité d\'ajouter photographe et vidéaste.';
-      if (/délai|urgent|rapidement/i.test(text)) reply = 'Nous pouvons intervenir avec un préavis de 14 jours minimum. Pour les événements urgents, contactez-nous directement au +33 1 23 45 67 89.';
-      if (/disponib/i.test(text)) reply = 'Pour vérifier nos disponibilités sur une date précise, le mieux est de soumettre une demande de devis avec votre date souhaitée.';
-      if (/paiement|acompte/i.test(text)) reply = 'Nous demandons un acompte de 50% à la signature du contrat, le solde 30 jours avant l\'événement. Paiement par CB, virement ou chèque.';
-      addMessage({ from: 'bot', text: reply });
-    }, 600);
+    request<{ reply: string }>(
+      isAdminMode ? '/ai/chat/admin' : isClientMode ? '/ai/chat/client' : '/ai/chat',
+      {
+      method: 'POST',
+      body: JSON.stringify({ message: text }),
+    })
+      .then(r => { if (r?.reply) addMessage({ from: 'bot', text: r.reply }); })
+      .catch(() => addMessage({ from: 'bot', text: localReply(text) }))
+      .finally(() => setThinking(false));
   };
 
   const formatText = (text: string) =>
@@ -267,7 +365,12 @@ export default function ChatbotIA() {
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {msg.options.map((opt, j) => (
                             opt.action === 'link_devis' ? (
-                              <Link key={j} to="/devis"
+                              <Link key={j} to={isClientMode ? '/client/devis' : '/devis'}
+                                className="text-xs bg-gold-500 text-dark-900 font-semibold px-3 py-1.5 rounded-full hover:bg-gold-400 transition-all">
+                                {opt.label}
+                              </Link>
+                            ) : opt.action === 'goto' && opt.path ? (
+                              <Link key={j} to={opt.path}
                                 className="text-xs bg-gold-500 text-dark-900 font-semibold px-3 py-1.5 rounded-full hover:bg-gold-400 transition-all">
                                 {opt.label}
                               </Link>
@@ -284,6 +387,18 @@ export default function ChatbotIA() {
                     </div>
                   </div>
                 ))}
+                {thinking && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-gold-500/20 border border-gold-500/30 flex items-center justify-center flex-shrink-0">
+                      <Bot size={13} className="text-gold-500" />
+                    </div>
+                    <div className="bg-white/[0.08] border border-white/10 rounded-2xl rounded-bl-sm px-3.5 py-2.5 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
@@ -295,10 +410,10 @@ export default function ChatbotIA() {
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSend()}
-                    placeholder="Votre message..."
+                    placeholder={isAdminMode ? 'Chiffre d\'affaires, réservations, devis…' : isClientMode ? 'Votre devis, vos paiements, vos packs…' : 'Votre message...'}
                     className="flex-1 bg-dark-700 border border-dark-600 rounded-xl px-3.5 py-2 text-sm text-white placeholder-dark-400 focus:outline-none focus:border-gold-500 transition-colors"
                   />
-                  <button onClick={handleSend} disabled={!input.trim()}
+                  <button onClick={handleSend} disabled={!input.trim() || thinking}
                     className="w-9 h-9 rounded-xl bg-gold-500 text-dark-900 flex items-center justify-center hover:bg-gold-400 transition-all disabled:opacity-40 flex-shrink-0">
                     <Send size={15} />
                   </button>

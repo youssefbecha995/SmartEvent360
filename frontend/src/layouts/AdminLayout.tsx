@@ -4,11 +4,12 @@ import {
   LayoutDashboard, Users, FileText, CalendarDays, UserCheck,
   Package, Calendar, DollarSign, Phone, Clock, Settings,
   LogOut, Menu, Search, ChevronDown, Plus, Ticket, Archive,
-  Sun, Moon, Globe, Layers, UsersRound
+  Sun, Moon, Globe, Layers, UsersRound, Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n, TranslationKey } from '@/lib/i18n';
 import NotificationBell from '@/components/NotificationBell';
+import ChatbotIA from '@/components/public/ChatbotIA';
 
 const navItems = [
   { to: '/admin',              icon: LayoutDashboard, label: 'Dashboard',       end: true },
@@ -17,6 +18,7 @@ const navItems = [
   { to: '/admin/evenements',   icon: CalendarDays,    label: 'Événements' },
   { to: '/admin/reservations', icon: Ticket,          label: 'Réservations' },
   { to: '/admin/packs',        icon: Archive,         label: 'Packs & Offres' },
+  { to: '/admin/propositions', icon: Sparkles,       label: 'Propositions IA' },
   { to: '/admin/services',     icon: Layers,          label: 'Services' },
   { to: '/admin/prestataires', icon: UsersRound,      label: 'Prestataires' },
   { to: '/admin/personnel',    icon: UserCheck,       label: 'Personnel' },
@@ -166,6 +168,7 @@ export default function AdminLayout() {
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           <Outlet />
+        <ChatbotIA mode="admin" />
         </main>
       </div>
     </div>

@@ -234,7 +234,36 @@ model Pack {
   packServices PackService[]
   features     Json?    // kept for backward compat
 
+  // Lignes détaillées du pack (personnel, équipement, prestation).
+  // Alimentées par le générateur de packs IA puis modifiables par l'admin.
+  items PackItem[]
+
   @@map("packs")
+}
+
+// ─────────────────────────────────────────────
+// PackItem (détails d'un pack : personnel, équipement, instrument)
+// ─────────────────────────────────────────────
+
+model PackItem {
+  id           String  @id @default(cuid())
+  category     String  // "personnel" | "equipement" | "instrument" | "lieu" | "service"
+  name         String  // ex: "DJ", "Piano", "Sonorisation"
+  description  String? // détails optionnels
+  defaultValue String  // choix par défaut du pack
+  customizable Boolean @default(false) // le client peut-il changer cette valeur ?
+  order        Int     @default(0) // ordre d'affichage
+  unitPrice    Float   @default(0) // prix unitaire de la prestation (DT), 0 = non chiffré
+
+  packId String
+  pack   Pack   @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([packId])
+  @@index([category])
+  @@map("pack_items")
 }
 
 // ─────────────────────────────────────────────

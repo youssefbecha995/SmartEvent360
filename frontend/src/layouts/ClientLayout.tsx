@@ -7,6 +7,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n, type Lang } from '@/lib/i18n';
 import NotificationBell from '@/components/NotificationBell';
+import ChatbotIA from '@/components/public/ChatbotIA';
 
 const navItems = [
   { to: '/client', icon: LayoutDashboard, label: 'Tableau de bord' as const, end: true },
@@ -134,6 +135,9 @@ export default function ClientLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Assistant IA de l'espace client */}
+      <ChatbotIA mode="client" />
     </div>
   );
 }

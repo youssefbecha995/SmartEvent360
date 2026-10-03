@@ -223,6 +223,17 @@ export interface NeonPackService {
   provider: Provider | null; // NOUVEAU : Prestataire avec tous ses détails
 }
 
+export interface NeonPackItem {
+  id: string; category: string; name: string; description: string | null;
+  defaultValue: string; customizable: boolean; order: number;
+  /** Prix unitaire en DT. Absent sur les packs créés avant son ajout. */
+  unitPrice?: number;
+}
+
+/** Catégories d'items gérées par le catalogue (ordre d'affichage). */
+export const PACK_ITEM_CATEGORIES = ['lieu', 'service', 'equipement', 'personnel', 'instrument'] as const;
+export type PackItemCategory = (typeof PACK_ITEM_CATEGORIES)[number];
+
 export interface NeonPack {
   id: string;
   name: string;
@@ -261,6 +272,7 @@ export interface NeonPack {
   updatedAt: string;
   packServices?: NeonPackService[];
   _count?: { packServices: number };
+  items?: NeonPackItem[];
 }
 
 export interface BookingStats {
@@ -516,6 +528,84 @@ export const servicesApi = {
   // ── Admin Stats ──
   stats: () => request<ServiceStats>('/services/admin/stats'),
 };
+
+export type PackTier = 'essentiel' | 'equilibre' | 'premium';
+
+export interface AiBrief {
+  type_evenement: string;
+  budget: number;
+  nb_invites: number;
+  duree_heures: number;
+  ville: string | null;
+  date_evenement: string | null;
+  demandes_speciales: string[];
+  message: string;
+}
+
+export interface AiProposalItem {
+  category: string; name: string; description: string | null;
+  defaultValue: string; customizable: boolean; order: number;
+  unitPrice: number; sur_demande?: boolean;
+}
+
+export interface AiProposal {
+  key: string; name: string; tier: PackTier; description: string;
+  price: number; duration: number; maxGuests: number; badge: string | null;
+  features: string[]; items: AiProposalItem[]; avertissements: string[];
+}
+
+export interface AiGenerateResponse {
+  id: string;
+  reference: string;
+  brief: AiBrief;
+  budget_cible: number;
+  moteur: 'openai' | 'regles';
+  avertissements: string[];
+  propositions: AiProposal[];
+}
+
+export type PropositionStatut = 'nouvelle' | 'en_cours' | 'converti' | 'archive' | 'refuse';
+
+/** Enregistrement CRM d'une proposition générée (usage admin). */
+export interface AiPropositionRecord extends AiGenerateResponse {
+  client_id: string | null;
+  client_nom: string | null;
+  statut: PropositionStatut;
+  created_at: string;
+  updated_at?: string;
+  notes: string | null;
+  proposition_retenue: string | null;
+  pack_id: string | null;
+  pack_name?: string | null;
+}
+
+export interface AiGenerateInput {
+  message?: string;
+  type_evenement?: string;
+  budget?: number;
+  nb_invites?: number;
+  duree_heures?: number;
+  ville?: string;
+  date_evenement?: string;
+  demandes_speciales?: string[];
+}
+
+export const aiApi = {
+  chat: (message: string) =>
+    request<{ reply: string }>('/ai/chat', { method: 'POST', body: JSON.stringify({ message }) }),
+  generatePacks: (body: AiGenerateInput) =>
+    request<AiGenerateResponse>('/ai/generate-packs', { method: 'POST', body: JSON.stringify(body) }),
+  listPropositions: (statut?: PropositionStatut) =>
+    request<AiPropositionRecord[]>(`/ai/propositions${statut ? `?statut=${statut}` : ''}`),
+  getProposition: (id: string) => request<AiPropositionRecord>(`/ai/propositions/${id}`),
+  updateProposition: (id: string, body: { statut?: PropositionStatut; notes?: string; proposition_retenue?: string }) =>
+    request<AiPropositionRecord>(`/ai/propositions/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  convertProposition: (id: string, body: { key: string; name?: string; price?: number; imageUrl?: string; isActive?: boolean }) =>
+    request<{ pack: NeonPack; proposition: AiPropositionRecord }>(`/ai/propositions/${id}/convert`, {
+      method: 'POST', body: JSON.stringify(body),
+    }),
+};
+
 
 // ─── Users (admin) ────────────────────────────────────────────────────────────
 

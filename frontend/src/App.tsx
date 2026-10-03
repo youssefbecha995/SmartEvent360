@@ -8,6 +8,7 @@ import PublicLayout from '@/layouts/PublicLayout';
 import HomePage from '@/pages/public/HomePage';
 import ServicesPage from '@/pages/public/ServicesPage';
 import PacksPage from '@/pages/public/PacksPage';
+import PackGeneratorPage from '@/pages/public/PackGeneratorPage';
 import ProvidersPage from '@/pages/public/ProvidersPage';
 import ProviderDetailPage from '@/pages/public/ProviderDetailPage';
 import AboutPage from '@/pages/public/AboutPage';
@@ -51,6 +52,7 @@ import AdminAppels from '@/pages/admin/AdminAppels';
 import AdminRendezVous from '@/pages/admin/AdminRendezVous';
 import AdminParametres from '@/pages/admin/AdminParametres';
 import AdminPacks from '@/pages/admin/AdminPacks';
+import AdminPropositions from '@/pages/admin/AdminPropositions';
 import AdminPackDetail from '@/pages/admin/AdminPackDetail';
 import AdminReservations from '@/pages/admin/AdminReservations';
 import AdminServices from '@/pages/admin/AdminServices';
@@ -106,6 +108,7 @@ function AppRoutes() {
         <Route path="/" element={<HomePage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/packs" element={<PacksPage />} />
+          <Route path="/packs/sur-mesure" element={<PackGeneratorPage />} />
         <Route path="/prestataires" element={<ProvidersPage />} />
         <Route path="/prestataires/:id" element={<ProviderDetailPage />} />
         <Route path="/a-propos" element={<AboutPage />} />
@@ -151,6 +154,7 @@ function AppRoutes() {
         <Route path="rendez-vous" element={<AdminRendezVous />} />
         <Route path="parametres" element={<AdminParametres />} />
         <Route path="packs" element={<AdminPacks />} />
+          <Route path="propositions" element={<AdminPropositions />} />
         <Route path="packs/:id" element={<AdminPackDetail />} />
         <Route path="reservations" element={<AdminReservations />} />
         <Route path="services" element={<AdminServices />} />
